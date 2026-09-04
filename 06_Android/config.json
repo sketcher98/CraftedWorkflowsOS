@@ -1,0 +1,116 @@
+{
+  "device": {
+    "model": "Infinix Smart 6",
+    "android_version": 11,
+    "ram_gb": 2,
+    "storage_gb": 32,
+    "termux_api_installed": true,
+    "tasker_installed": true,
+    "autotools_installed": true,
+    "autoinput_installed": true
+  },
+  "rate_limits": {
+    "linkedin_dm": {
+      "daily_limit": 5,
+      "min_delay_minutes": 15,
+      "max_delay_minutes": 45,
+      "active_hours_start": 8,
+      "active_hours_end": 23
+    },
+    "x_dm": {
+      "daily_limit": 5,
+      "min_delay_minutes": 10,
+      "max_delay_minutes": 30,
+      "active_hours_start": 8,
+      "active_hours_end": 23
+    },
+    "x_follow": {
+      "daily_limit": 10,
+      "min_delay_minutes": 5,
+      "max_delay_minutes": 20,
+      "active_hours_start": 8,
+      "active_hours_end": 23
+    },
+    "x_media_tweet": {
+      "daily_limit": 10,
+      "min_delay_minutes": 10,
+      "max_delay_minutes": 30,
+      "active_hours_start": 8,
+      "active_hours_end": 23
+    }
+  },
+  "spintax": {
+    "linkedin_dm_openers": [
+      "Hey {name} — quick one.",
+      "Hi {name}, quick question.",
+      "Hello {name}, mind if I'm direct?",
+      "Hey {name}, brief question.",
+      "Hi {name} — 30 seconds?"
+    ],
+    "x_dm_openers": [
+      "Hey — saw your post.",
+      "Hi, quick one.",
+      "Hey, brief question.",
+      "Hi — mind a quick question?"
+    ],
+    "follow_up_templates": [
+      "Quick nudge — genuinely curious.",
+      "Just checking if you saw this.",
+      "No pressure either way."
+    ]
+  },
+  "selectors": {
+    "linkedin": {
+      "search_bar": "com.linkedin.android:id/search_bar_text",
+      "profile_name": "com.linkedin.android:id/profile_name",
+      "message_button": "com.linkedin.android:id/message_button",
+      "message_input": "com.linkedin.android:id/compose_message_text",
+      "send_button": "com.linkedin.android:id/send_button",
+      "chat_list_item": "com.linkedin.android:id/chat_list_item"
+    },
+    "x": {
+      "search_bar": "com.twitter.android:id/search_query",
+      "profile_username": "com.twitter.android:id/user_screen_name",
+      "dm_button": "com.twitter.android:id/dm_button",
+      "message_input": "com.twitter.android:id/dm_composer_text",
+      "send_button": "com.twitter.android:id/dm_send_button",
+      "compose_button": "com.twitter.android:id/compose_tweet_button",
+      "media_button": "com.twitter.android:id/media_button",
+      "tweet_input": "com.twitter.android:id/tweet_text",
+      "post_button": "com.twitter.android:id/button_tweet",
+      "follow_button": "com.twitter.android:id/follow_button",
+      "following_button": "com.twitter.android:id/following_button"
+    }
+  },
+  "behavior": {
+    "max_retries": 3,
+    "retry_base_delay_seconds": 300,
+    "rate_limit_pause_hours": 1,
+    "app_launch_timeout_seconds": 10,
+    "action_timeout_seconds": 30,
+    "toast_keywords_rate_limit": [
+      "rate limited",
+      "too many requests",
+      "try again later",
+      "limit reached"
+    ],
+    "toast_keywords_error": [
+      "something went wrong",
+      "error",
+      "failed",
+      "could not"
+    ]
+  },
+  "paths": {
+    "queue_dir": "/data/data/com.termux/files/home/CraftedWorkflowsOS/06_Android/queue",
+    "results_dir": "/data/data/com.termux/files/home/CraftedWorkflowsOS/06_Android/results",
+    "state_dir": "/data/data/com.termux/files/home/CraftedWorkflowsOS/06_Android/state",
+    "scripts_dir": "/data/data/com.termux/files/home/CraftedWorkflowsOS/06_Android/scripts",
+    "log_file": "/data/data/com.termux/files/home/CraftedWorkflowsOS/06_Android/state/android_layer.log"
+  },
+  "logging": {
+    "level": "INFO",
+    "max_log_size_kb": 500,
+    "rotate_on_boot": true
+  }
+}

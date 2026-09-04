@@ -1,0 +1,42 @@
+# CraftedWorkflowsOS .gitignore
+
+# Python / runtime
+__pycache__/
+*.py[cod]
+*.so
+.env
+.venv/
+venv/
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Android / Termux specific
+06_Android/state/
+06_Android/results/
+06_Android/__pycache__/
+.cache/
+*.log
+
+# Notion / local credentials
+*.token
+*.key
+secrets/
+*.secret
+
+# Archives
+Archive/
+Archive-*/
+*.zip
+*.tar.gz
+
+# Session / runtime state
+runtime/cache/
+.checkpoint.json

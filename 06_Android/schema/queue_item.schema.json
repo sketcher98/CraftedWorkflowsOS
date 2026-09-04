@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craftedworkflows.local/schemas/queue_item.json",
+  "title": "CraftedWorkflowsQueueItem",
+  "description": "Envelope schema for Android-layer queue items. Hermes writes this shape into queue/*.json. The routing block carries the gap_index -> provider -> fallback decision made at intent time, so routing is static, auditable, and restart-safe.",
+  "type": "object",
+  "required": ["routing", "action", "message"],
+  "properties": {
+    "routing": {
+      "type": "object",
+      "required": ["gap_index", "provider", "fallback"],
+      "properties": {
+        "gap_index": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "provider": { "type": "string", "enum": ["arcade", "zernio", "composio", "native_android"] },
+        "fallback": { "type": "string", "enum": ["autoinput", "adb", "none"] }
+      },
+      "additionalProperties": false
+    },
+    "action": { "type": "string", "minLength": 1 },
+    "id": { "type": "string" },
+    "lead_id": { "type": "string" },
+    "message": { "type": "string" },
+    "target": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "profile_url": { "type": "string" },
+        "handle": { "type": "string" },
+        "media_urls": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "gap_meta": {
+      "type": "object",
+      "required": ["platform", "capability"],
+      "properties": {
+        "platform": { "type": "string" },
+        "capability": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,1838 @@
+# Craftedworkflows__
+
+# Stop Hiring People for Work AI Can Do 24/7
+
+If your growth requires more coordination, more reminders, more follow-ups, and more oversight - you’re not scaling. You’re compounding complexity.
+
+We install systems that run your agency’s sales, onboarding, and operations without constant founder supervision, & works whether you show up or not.
+
+Result: More clients. Less coordination. **Zero operational chaos.
+
+ ***Diagnose Your Operational Bottlenecks ➝*** https://tally.so/r/mD5E55
+
+*Most founders discover 3-7 hidden bottlenecks during the audit.*
+
+!66be40d1e83ebaab1f36c55f_hero-gif-atualizado.gif
+
+---
+
+## Trusted by founders running agencies between $10k–$100k/month across:
+
+<aside>
+<img src="/icons/checkmark_green.svg" alt="/icons/checkmark_green.svg" width="40px" /> **Marketing Agencies**
+
+</aside>
+
+<aside>
+<img src="/icons/checkmark_green.svg" alt="/icons/checkmark_green.svg" width="40px" /> **Design Studios**
+
+</aside>
+
+<aside>
+<img src="/icons/checkmark_green.svg" alt="/icons/checkmark_green.svg" width="40px" /> **Consulting Firms**
+
+</aside>
+
+<aside>
+<img src="/icons/cash_green.svg" alt="/icons/cash_green.svg" width="40px" /> **Service Businesses**
+
+</aside>
+
+## Who feel like:
+
+## ⚠️ Growth requires more you
+
+## ⚠️ Every new client adds chaos
+
+## ⚠️ Time disappears into follow-ups and admin
+
+## ⚠️ Revenue is growing, but operations feel chaotic
+
+## ⚠️ The business slows down when you step away
+
+## ✅ You want to scale without hiring more people
+
+## ✅ You value systems, leverage, and long-term thinking
+
+## Not for you if:
+
+## ❌ You’re looking for “tools only”
+
+## ❌ You want DIY tutorials or templates
+
+## ❌ You’re looking for cheap automation hacks
+
+## ❌ Your business still runs entirely on improvisation
+
+## ❌ You believe more staff is the only way to scale
+
+## ❌ You’re not ready to change how you operate
+
+## ❌ You’re in Early-stage, figuring out how to get clients
+
+---
+
+### *If your business needs daily supervision to survive - you don’t need motivation. You need systems!*
+
+ ***Diagnose My Operational Bottlenecks ➝*** https://tally.so/r/mD5E55
+
+*No sales pitch. • No obligation. • Just clarity.*
+
+---
+
+## Manual Scale Is Killing Profitable Businesses
+
+***You get more clients, which should mean more profit.***
+
+Instead it often means: *more Slack messages.*
+
+Then *more follow-ups.*
+
+More *onboarding tasks.*
+
+More *“quick questions.”*
+
+More *internal bottlenecks.*
+
+More *dependency on you.*
+
+More fires.
+
+So you hire.
+
+Hiring doesn’t remove the problem.
+
+It adds layers to it.
+
+Now you’re managing people to complete tasks that should have been systemized.
+
+Supervision expands.
+
+Margins compress.
+
+Your bandwidth shrinks.
+
+You become the approval bottleneck.
+
+The final decision maker.
+
+The system.
+
+**You see, Manual scale feels like growth.**
+
+**Until it quietly becomes drag.**
+
+---
+
+## The Businesses Winning Now Don’t Scale People. 
+They Scale Infrastructure First.
+
+✅  **Leads** are captured, tagged, routed, and nurtured automatically.
+
+---
+
+✅  **Follow-ups** trigger instantly - not when someone remembers.
+
+---
+
+✅  **Prospects** are qualified before a human touches the pipeline
+
+---
+
+✅  **Prospects** are then nurtured daily without manual chasing.
+
+---
+
+✅  **Onboarding** launches itself once payment clears.
+
+---
+
+✅  **Internal tasks** assign, notify, and escalate without micromanagement.
+
+---
+
+✅  **Dashboards** show performance in real time.
+
+---
+
+*No duct tape.*
+
+*No constant oversight.*
+
+If it’s repetitive and predictable, it should not require human effort.
+
+!1000629359.png
+
+---
+
+# Why CraftedWorkflows Exists
+
+<aside>
+
+## And why even listen to me?
+
+***Trust me, I learned this the hard way…***
+
+***I used to run a marketing agency.***
+
+***When projects came in, I either did the work myself or outsourced it on platforms like Fiverr and Upwork.***
+
+***Revenue grew.***
+
+***So did operational chaos.***
+
+***More clients meant more coordination.***
+
+***More coordination meant more time.***
+
+***More time meant less leverage.***
+
+***My time got split across delivery, client communication, hiring, revisions, and admin.***
+
+***I was scaling work. Not leverage.***
+
+***I discovered most of it could be automated.***
+
+***I didn’t know how to code.***
+
+***So I went down the rabbit hole - learning platforms like Make, rebuilding processes inside Notion, connecting systems with AI.***
+
+***Three months later, my agency struggled, not because systems failed, but because the old business model depended on constant attention.***
+
+***That was the turning point.***
+
+***Manual hustle was fragile.
+Infrastructure was scalable.***
+
+***I shut the agency down.***
+
+***And went all-in on system architecture.***
+
+***Today, I help founders remove themselves as the bottleneck - and replace manual growth with automation that runs 24/7.***
+
+***Since then I’ve helped founders inside agencies, consultancies, and service businesses implement 140+ automation projects to remove operational bottlenecks using systems built with:***
+
+- ***Notion***
+- ***Make***
+- ***AI automation***
+- ***CRM infrastructure***
+- ***Workflow architecture***
+
+</aside>
+
+---
+
+# What We Install: The 6 Core Systems Every Scalable Agency Backend Needs
+
+This is architecture, not random workflows.
+
+<aside>
+1️⃣
+
+### Lead Capture & Qualification Systems
+
+Automatically capture, filter, tag, and route leads to the right next step, without manual sorting or inbox chaos.
+
+</aside>
+
+<aside>
+2️⃣
+
+### Automated Follow-Up & Conversion Engines
+
+Sequences that nurture leads, re-engage prospects, qualify opportunities, and book calls automatically so deals don’t slip through the cracks.
+
+</aside>
+
+<aside>
+3️⃣
+
+### Sales Pipeline & Deal Tracking
+
+Structured pipeline systems that track conversations, proposals, deal stages, and next actions, giving you clear visibility into revenue flow.
+
+</aside>
+
+<aside>
+4️⃣
+
+### Client Onboarding Infrastructure
+
+Contracts, forms, payments, asset collection, task creation, and internal notifications, triggered instantly when a client closes.
+
+</aside>
+
+<aside>
+5️⃣
+
+### Internal Operations & Delivery Systems
+
+Projects creation, Task routing, approvals, reminders, and team coordination, structured so delivery runs smoothly without constant founder intervention.
+
+</aside>
+
+<aside>
+6️⃣
+
+### Reporting & Visibility Systems
+
+Real-time dashboards showing pipeline activity, delivery status, team workload, and operational performance, without asking your team / chasing updates.
+
+</aside>
+
+### Most agencies have pieces of these systems. Very few have them connected.
+
+!14.jpg
+
+## Operational Problems We Remove
+
+A lot of agencies don’t realize how much friction lives inside their backend until it’s mapped.
+
+These are the most common issues we eliminate.
+
+---
+
+<aside>
+<img src="/icons/mail_yellow.svg" alt="/icons/mail_yellow.svg" width="40px" /> **Leads sitting in inboxes instead of pipelines**
+
+New inquiries arrive through forms, email, DMs, or calendars — but nothing automatically routes them into a structured system.
+
+Leads get forgotten, follow-ups happen inconsistently, and opportunities quietly disappear, **because** no one had time to respond.
+
+</aside>
+
+<aside>
+<img src="/icons/dish-soap_purple.svg" alt="/icons/dish-soap_purple.svg" width="40px" /> **You - the founder is still the operational glue**
+
+When something breaks, stalls, or needs clarification, the team constantly routes the Decisions back to you, the founder.
+
+Instead of systems handling coordination, the founder becomes the default problem-solver.
+
+This is where growth begins to stall.
+
+</aside>
+
+<aside>
+<img src="/icons/dialogue_red.svg" alt="/icons/dialogue_red.svg" width="40px" /> **Team members wait for instructions**
+
+Without structured workflows, team members rely on manual task assignment or founder direction.
+
+Now, Delivery becomes reactive instead of system-driven.
+
+</aside>
+
+<aside>
+<img src="/icons/refresh-reverse_blue.svg" alt="/icons/refresh-reverse_blue.svg" width="40px" /> **Follow-ups depend on memory**
+
+Prospects who said “follow up next week” rarely get contacted at the right time.
+
+Without automated sequences, most agencies rely on memory, spreadsheets, or scattered reminders.
+
+Revenue leaks here more than founders realize.
+
+</aside>
+
+<aside>
+<img src="/icons/send_orange.svg" alt="/icons/send_orange.svg" width="40px" /> **Client onboarding requires manual coordination**
+
+Contracts, invoices, onboarding forms, asset requests, project creation, and team notifications often happen manually after a deal closes.
+
+This slows momentum, creates confusion internally, and makes onboarding feel chaotic.
+
+</aside>
+
+<aside>
+<img src="/icons/dashboard_green.svg" alt="/icons/dashboard_green.svg" width="40px" /> **Reporting requires asking people**
+
+To understand what’s happening in the business, founders often have to ask the team for updates.
+
+There’s no real-time operational visibility.
+
+</aside>
+
+<aside>
+
+And when growth comes?
+
+The only solution most businesses see is hiring.
+
+- A VA.
+- An operations person.
+- Another coordinator.
+
+### That’s $1,500 – $4,000/month per hire.
+Every month. **FOREVER!**
+
+But here’s the real problem:
+
+Even after hiring, the system still depends on you.
+
+**You’re just supervising the chaos now.**
+
+Most agencies eventually solve this problem by hiring operations staff.
+
+But the **average operations hire costs $30k – $60k per year.**
+
+And that’s assuming they’re good.
+
+Systems solve the same problem - **ONCE**.
+
+</aside>
+
+<aside>
+
+## What changes after the rebuild
+
+Instead of relying on memory, manual coordination, and scattered tools,
+
+➡️ Your backend begins to **run through systems.**
+
+➡️ Leads move automatically.
+
+➡️ Clients onboard themselves.
+
+➡️ Teams receive structured tasks.
+
+➡️ And founders regain operational clarity.
+
+</aside>
+
+# Choose how far you want to step out of the business.
+
+*Every option removes more manual work - and more of you from the process, while paying you back in time and revenue*
+
+---
+
+!Untitled design (8) (2) (1).png_(2)_(1).png)
+
+🔵 OPTION 1
+
+### System Jumpstart
+
+---
+
+## **$1,497 One-Time**
+
+---
+
+🚀 **Perfect for founders buried in repetitive admin.**
+
+*For those just starting to automate and wanting to save time on repetitive tasks, by removing the obvious bottlenecks & streamlining key processes like lead management, social media scheduling, & simple project tracking.*
+
+👉 You stop doing repetitive tasks.
+
+What is included (1)
+
+**Outcome:** Immediate reduction in operational drag.
+
+### **Guarantee:**
+
+If we do not implement at least one measurable workflow that reduces manual workload within 30 days, your second engagement is free.
+
+!Untitled design (5) (1).png_(1).png)
+
+🟢 OPTION 2
+
+### Install Self-Running Revenue
+
+---
+
+## **$3,497 One-Time** *(Most Popular)*
+
+---
+
+🎯 **Best for Growing Agencies & Small Teams**
+
+*A balanced, high-value package designed to assist/replace people with systems, streamline your processes and boost revenue with way more powerful automation, without breaking the bank.*
+
+👉 The business runs without constant oversight.
+
+Untitled
+
+**Outcome:** Leads are nurtured, qualified, and booked without constant oversight.
+
+### **Guarantee:**
+
+If your conversion infrastructure is not measurably 2X stronger within 60 days, we continue optimizing at no additional cost until it is.
+
+!Untitled design (7) (2) (1).png_(2)_(1).png)
+
+ 🟣 OPTION 3
+
+### Remove Founder from Daily Operations
+
+---
+
+## **$4,997 / Month (3-Month Minimum)**
+
+---
+
+👑 **Built for operators scaling toward $100k+/month**
+
+*This is for ambitious agency owners, industry leaders & consultants who want to remove yourself from daily operations & create a well-oiled, automated machine that works 24/7, automating every aspect of your business operations*
+
+👉 You stop being the farmhand.
+
+Untitled
+
+**Outcome:** The business runs on systems — not supervision.
+
+### **Guarantee:**
+
+If we cannot demonstrate measurable operational leverage within the first 90 days, we continue working at no additional cost until we do.
+
+## For any Option, This all starts with clarity - not commitment.
+
+### So:
+
+You DON’T need to Know what to automate
+
+You DON’T need to Understand the tools
+
+You DON’T need to Have everything figured out
+
+That’s what the audit is for.
+
+ ***Diagnose My Operational Bottlenecks ➝*** https://tally.so/r/mD5E55
+
+---
+
+## **Trusted and Recommended by…**
+
+!city.gif
+
+---
+
+## Our Recent Work
+
+1# **Saving 45hrs/Month with 1-Click Offboarding**
+
+!Remote-Work-Is-Here-to-Stay.jpg
+
+<aside>
+<img src="/icons/star-of-life_gray.svg" alt="/icons/star-of-life_gray.svg" width="40px" />
+
+**Testimonial**
+
+---
+
+*“Offboarding used to mean 17 manual steps across 5 tools.* 
+
+*Now, clicking ‘Offboard’ revokes access, archives files, and even sends exit surveys.* 
+
+*We saved 45hrs/month… and our clients’ legal team cried happy tears.”*
+
+</aside>
+
+## The Brief
+
+---
+
+RemoteFirst’s chaotic offboarding process risked data leaks and client lawsuits.
+
+Anika’s business managed global remote teams. Offboarding consultants and employees was complex, manual, and inconsistent. She wanted a smooth, legally-compliant, and automated process.
+
+![](https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+---
+
+## The Challenge
+
+---
+
+Each offboarding involved chasing IT, HR, Finance, and Legal for 17 steps—access revocation, file backup, NDAs, surveys, etc. It was time-consuming and prone to errors, increasing compliance risks.
+
+- **17 manual steps** per offboarding case
+- **9hrs spent weekly** on access revocation
+- **0 audit trails**, leading to compliance risks
+
+![](https://images.unsplash.com/photo-1531403009284-440f080d1e12?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+---
+
+## The Strategy & Process
+
+---
+
+We mapped the full offboarding journey, then built a Notion + Make.com automation that triggered everything from a single “Offboard” button.
+
+- 1-click tool to revoke Slack, Google Workspace, and AWS access
+- Integrated Slack, Google Workspace, Notion, and GDrive
+- Automatically archived client docs and transferred ownership
+- Sent feedback surveys + offboarding checklists
+- Logged timestamps and generated PDF reports for audit trails
+
+![](https://images.unsplash.com/photo-1531379410502-63bfe8cdaf6f?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+## The Outcome
+
+---
+
+<aside>
+👉 **45hrs/month saved** (9hrs → 15mins/week)
+
+</aside>
+
+<aside>
+👉 **1-click offboarding** for contractors and employees
+
+</aside>
+
+<aside>
+👉 **100% accuracy** in offboarding compliance
+
+</aside>
+
+<aside>
+👉 **22% client retention boost** via graceful exits
+
+</aside>
+
+<aside>
+👉 Clients reported higher trust and professionalism
+
+</aside>
+
+<aside>
+👉 **100% compliance** with GDPR/CCPA
+
+</aside>
+
+### **Benefits and Impact**
+
+---
+
+Anika’s business now offboards talent across 3 continents with ease. Legal and HR teams rave about it.
+
+### 📸 One of the **Automations in Action**
+
+---
+
+Offboarding Trigger automation
+
+
+2Cutting Design Agency Delivery Time by 40% with AI
+
+$19k/month in high-ticket design retainers added in Q3 ‘24
+Empty
+
+Testimonial
+“We were drowning in client revisions and asset management until CraftedWorkflows automated our entire design pipeline. Now, client feedback gets organized automatically, files sync between Figma and our project management tool, and even our invoice approvals are handled by AI. We’ve cut project delivery time by 40% and finally have bandwidth to take on more high-ticket clients. 
+P.S. Our team renamed the AI bot ‘Pixel’—it’s basically our 5th designer now.”
+The Brief
+Lumina’s 12-person team was losing $22k/month in billable hours due to chaotic feedback loops and version control issues.
+Lumina urgently needed to scale operations without hiring more team members. 
+The goal: organize design tasks, feedback, and file handoffs into a seamless, automated backend.
+
+The Challenge
+Revisions were being managed through 4+ channels—Slack, email, Notion, Figma, etc. Files were missing. Clients were frustrated. Internal design work felt chaotic, and it was slowing growth.
+47 average Slack messages per project for file requests
+11-day average delay in client approvals
+9 tools being used inconsistently across teams
+
+The Strategy & Process
+AI feedback analyzer (flags conflicting client comments)
+Centralized feedback through an AI-powered form that parses comments into tasks
+Synced Figma files to auto-organize into client-specific folders
+Automated invoice approval workflows using Make, Google Drive & Stripe
+Trained an internal bot (nicknamed "Pixel") to handle common client support requests, asset delivery, and reminders
+Implemented a dashboard for real-time project and revision tracking
+
+The Outcome
+40% faster project delivery (industry avg: 22 days → 13 days)
+92% client retention rate (prev. 68%)
+$44k new MRR from expanded capacity
+Pixel AI Bot handled 120+ client queries in first 2 months
+17hrs/week saved per designer
+$19k/month in high-ticket design retainers added in Q3
+Benefits and Impact
+Lumina now runs with military-grade precision. They’ve eliminated manual follow-ups and admin bloat, delivering a smoother, more professional client experience—and tripling retention rate.
+ One of the Automations in Action
+Automated feedback-to-task pipeline with synced asset handoffs + AI project status bot.
+
+
+
+3Scaling a Coaching Business to 6 Figures with 60% Less Work
+
+60% fewer work hours: 55hrs/week → 22hrs/week
+Empty
+
+Testimonial
+“I spent years juggling every part of my consulting business. By the time I found CraftedWorkflows, I was at my breaking point—exhausted, overworked, and overwhelmed. Now, with automated client follow-ups, proposal generation, and feedback collection, I have more time to coach my clients and perfect my craft. I’ve scaled to six figures with ease, and the crazy part? I’m working less than ever.”
+The Brief
+Marcus Bailey’s 1:1 coaching model was maxed out at $8k/month. Manual client management (scheduling, invoicing, feedback) left no time for scaling.
+Marcus needed help turning his 1-man consulting practice into a scalable business that runs even when he’s offline.
+
+The Challenge
+Every touchpoint—sales calls, proposals, onboarding, follow-ups—was handled manually. He was maxed out on client hours, constantly behind, and unsure how to scale.
+15+ hours/week wasted on admin (scheduling, chasing payments)
+42% client onboarding drop-off due to slow response times
+0 automated systems for upselling or referrals
+
+The Strategy & Process
+Installed lead magnet automations that fed into an AI-driven sales sequence
+Calendly + Stripe integration for instant booking/payment
+Setup dynamic proposal generator tied to Calendly & offer pages
+Built a smart onboarding system: clients sign contracts, book sessions, and access resources instantly
+Automated post-session feedback surveys with dynamic discount offers
+Created a custom support bot to answer FAQs, share prep materials, and collect feedback
+AI nurture sequences for webinar upsells ($5k/mastermind)
+Referral rewards auto-deposited to client accounts
+
+The Outcome
+$100k revenue milestone hit in 6 months
+0% onboarding drop-off: Instant booking/payment slashed delays
+12+ hours/week saved on proposal + follow-ups
+60% fewer work hours: 55hrs/week → 22hrs/week
+28% referral rate: Automated rewards drove organic growth
+Client response rate increased by 52%
+Benefits and Impact
+Marcus reclaimed his time and clarity. He now spends more time doing deep coaching work, has a better client experience, and runs a six-figure operation with minimal stress.
+ One of the Automations in Action
+Automated proposal flow + AI onboarding dashboard + client success bot.
+
+
+
+4# **Automating Content Repurposing for a 300% Traffic Boost**
+
+!Pipegrids-23-scaled.jpg
+
+<aside>
+<img src="/icons/star-of-life_gray.svg" alt="/icons/star-of-life_gray.svg" width="40px" />
+
+**Testimonial**
+
+---
+
+*“I’m blown away by how CraftedWorkflows transformed our operations. From automating content repurposing to streamlining invoicing, they covered every aspect of our workflow. We went from drowning in manual tasks to having a clear, automated process that works flawlessly.* 
+
+*I’ve even had clients compliment us on how professional our systems feel.”*
+
+</aside>
+
+## The Brief
+
+---
+
+Visionary Content Studio wanted to automate the delivery of content repurposing services while keeping a white-glove experience.
+
+They also needed to scale content output for SaaS clients without hiring more writers. Manual processes caused missed deadlines and inconsistent quality.
+
+![](https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+---
+
+## The Challenge
+
+---
+
+Clients submitted content through random channels. Repurposing was a manual, messy task. Tracking invoices and revisions drained focus from creative output.
+
+- 8+ hours spent weekly repurposing 1 blog into social assets
+- 11 tools for invoicing, project management, and file sharing
+- 14-day average turnaround for client revisions
+
+![](https://images.unsplash.com/photo-1531403009284-440f080d1e12?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+---
+
+## The Strategy & Process
+
+---
+
+- Developed an AI-based content repurposing assistant that generates new formats (reels, tweets, blog summaries)
+    - AI video/audio → blog/article generator (1hr → 8mins)
+    - Auto-posting to 6 platforms with brand-specific hashtags
+- Created an intelligent intake form connected to their CMS
+- Notion client portal for real-time edits/approvals
+- Automated task creation from submissions directly into Asana & Notion
+- Synced invoice flow and content delivery notifications
+    - Auto-invoicing triggered by project milestones
+
+![](https://images.unsplash.com/photo-1531379410502-63bfe8cdaf6f?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+## The Outcome
+
+---
+
+<aside>
+👉 **300% traffic growth**: 12k → 48k monthly organic visitors
+
+</aside>
+
+<aside>
+👉 **$29k/month added revenue**: Scaled from 5 to 17 clients
+
+</aside>
+
+<aside>
+👉 **4 client referrals** within first month post-launch
+
+</aside>
+
+<aside>
+👉 **90% faster revisions**: 14 days → 1.4 days
+
+</aside>
+
+<aside>
+👉 **100% on-time delivery**: Eliminated missed deadlines
+
+</aside>
+
+<aside>
+👉 **60% increase** in repurposed content output
+
+</aside>
+
+### Benefits and Impact
+
+---
+
+Natalie’s team now handles more clients, faster, without compromising quality. The systems elevate their brand and create a wow-factor for clients.
+
+### 📸 One of the **Automations in Action**
+
+---
+
+Content intake → AI repurposing assistant → Task creation + invoice sync + client delivery.
+
+
+5Onboarding 14 Clients in 30 Days with Zero Effort & 0 Errors
+
+Competitor envy: 3 inbound requests to license the workflow system
+Empty
+
+Testimonial
+“Client onboarding was a nightmare—endless emails, missed contracts, and 3 different tools to manage. Now, new clients get a branded portal where they sign contracts, submit assets, and pick services… all automated. We’ve onboarded 14 clients in 30 days without a single hiccup. Weirdly, our biggest competitor asked if they can license OUR onboarding system last week.”
+The Brief
+Nordic UX Agency’s onboarding process caused 21% client attrition. Manual contract routing and asset collection delayed projects by weeks.
+Lucas wanted to overhaul the agency’s onboarding to create a smoother, more premium experience.
+
+The Challenge
+Each new client required 15+ back-and-forth messages. Files were submitted late, contracts got lost, and first impressions suffered. It slowed down design kickoff by over a week.
+17 manual steps to onboard 1 client
+34% of projects started late due to missing assets
+0 brand consistency in client communications
+
+The Strategy & Process
+Built a custom client portal for onboarding steps: service selection, contract signing, asset upload
+Created onboarding sequences via Make that populate Notion/ClickUp with client info
+Setup client-specific folders, naming conventions, and checklists auto-generated per project
+Automated reminders, kickoff briefs, and welcome videos personalized to client tier
+AI-Powered Handoff
+Auto-assign tasks to designers based on client choices
+Slack alerts for project managers when clients complete steps
+
+The Outcome
+14 clients onboarded in 30 days  with zero manual follow-up (previously 4/month)
+2.2x faster project starts: 21 days → 9 days
+5-star onboarding reviews from 80% of clients
+Competitor envy: 3 inbound requests to license the workflow system
+0 errors: 100% compliance with asset deadlines
+72% reduction in onboarding time
+Benefits and Impact
+Lucas turned onboarding from a pain point into a competitive edge. His team saves time and impresses clients—before the work even begins.
+ One of the Automations in Action
+Branded onboarding portal → e-sign → asset upload → ClickUp project creation + client kickoff brief.
+
+
+
+6# **Doubling Organic Traffic with AI Trend Prediction**
+
+!445493434_7641062672681006_4255349612077945901_n.jpg
+
+<aside>
+<img src="/icons/star-of-life_gray.svg" alt="/icons/star-of-life_gray.svg" width="40px" />
+
+**Testimonial**
+
+---
+
+*“Our AI scrapes trending Reddit threads, industry reports, and competitor blogs… then creates daily content briefs tailored to our niche. Our organic traffic doubled in 90 days. It even predicted 3 viral trends before our team noticed!”*
+
+</aside>
+
+## The Brief
+
+---
+
+TokiTech wanted to turn trendspotting into a daily habit—automated. They needed to cut down research time and boost content velocity while maintaining topical relevance, but lacked research bandwidth.
+
+![](https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+---
+
+## The Challenge
+
+---
+
+Their content team spent hours researching trends, and by the time posts were ready, the moment had passed. They needed a system that spotted what mattered—*before* it went viral.
+
+- **4 days** to produce 1 SEO-optimized blog
+- **0 trend prediction systems**, causing missed opportunities
+- **12k monthly visitors** with stagnant growth
+
+![](https://images.unsplash.com/photo-1531403009284-440f080d1e12?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+---
+
+## The Strategy & Process
+
+---
+
+We integrated APIs from Reddit, Feedly, and Google Trends to surface niche-relevant topics.
+
+AI then summarized findings and formatted them into content briefs—including headlines, CTAs, and creative prompts.
+
+We linked this system directly to their Notion content calendar and Slack for daily delivery.
+
+**Phase 1:** AI Content Engine
+
+- Scraped 50+ sources (Reddit, Bloomberg, G2) daily
+- Auto-generated briefs with viral keywords and CTAs
+
+**Phase 2:** Predictive Analytics
+
+- AI flagged 3 rising trends (e.g., "AI governance") 14 days before competitors
+
+![](https://images.unsplash.com/photo-1531379410502-63bfe8cdaf6f?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+## The Outcome
+
+---
+
+<aside>
+👉 **100% traffic growth** (12k → 24k visitors/month)
+
+</aside>
+
+<aside>
+👉 **70% faster content production** (18 days → 3 days)
+
+</aside>
+
+<aside>
+👉 Team published 2x more content weekly
+
+</aside>
+
+<aside>
+👉 **3 viral trends capitalized** ahead of competitors
+
+</aside>
+
+<aside>
+👉 3 trends predicted before they hit mainstream
+
+</aside>
+
+<aside>
+👉 90-day organic traffic doubled + Research time dropped by 80%
+
+</aside>
+
+### **Benefits and Impact**
+
+---
+
+The team stopped reacting and started leading. TokiTech’s brand became a first-mover in their space. 
+• **Team Morale**: Writers shifted from research to storytelling
+
+### 📸 One of the **Automations in Action**
+
+---
+
+
+7Doubling Client Base with AI-Powered Lead Management
+
+2X client base in 6 months (12 → 24 retainer clients)
+Empty
+
+Testimonial
+“We were the classic agency—great at delivering results, terrible at managing our own backend. CraftedWorkflows turned that around by building us a robust, automated lead management system. Now, our pipeline is always full, and we know exactly who to reach out to and when. This newfound clarity and efficiency have allowed us to double our client base in 6 months.”
+The Brief
+Vivid Digital was scaling fast but their backend systems weren’t. 
+Leads slipped through cracks. No CRM, no follow-up logic, no deal pipeline, struggled with lead leakage due to manual tracking, missing 37% of high-intent prospects.
+They needed structure—Fast.
+
+The Challenge
+The agency had a steady stream of leads but no system to manage them. Follow-ups were inconsistent. High-quality leads ghosted because of poor timing or forgotten next steps.
+$220k/year lost to unprioritized leads
+0 lead scoring, causing missed opportunities
+10-14-day lag in follow-ups
+
+The Strategy & Process
+We built a Notion-based CRM linked to a Make.com automation that:
+Logged every new lead from Tallyform, Calendly, and DMs
+Tagged based on service interest + readiness
+Triggered personalized email sequences and internal reminders
+Generated automated follow-up tasks with built-in logic
+Synced everything to Ethan’s project board for visibility
+Step 1: AI Lead Scoring Engine
+Trained on 2 years of CRM data to identify “hot” leads
+Auto-tagged leads by budget, intent, and urgency
+Step 2: Autonomous Outreach
+AI drafted personalized LinkedIn/email follow-ups
+Calendly sync for instant booking
+
+The Outcome
+2X client base in 6 months (12 → 24 retainer clients)
+80% faster lead qualification
+Team finally aligned on deal pipeline stages
+89% lead conversion rate (prev. 42%)
+0 leads lost due to poor follow-up
+Projected $550k/year revenue increase
+Benefits and Impact
+Ethan reclaimed clarity, control, and consistency—every lead now gets nurtured, tracked, and closed efficiently.
+ One of the Automations in Action
+Lead Intake + CRM Flow
+
+
+8# **Automating 81% of Client Onboarding for Luxury Furniture Brand**
+
+!ea79dd1e-f884-b7f8-2a7b-5e4d82c99079.gif
+
+<aside>
+<img src="/icons/star-of-life_gray.svg" alt="/icons/star-of-life_gray.svg" width="40px" />
+
+**Testimonial**
+
+---
+
+"We’re not just competing with the big-name furniture retailers—we’re outperforming them. Since implementing automations, we’ve been hitting sales targets faster than ever. Streamlining our processes has freed me up to focus on designing & crafting exceptional new pieces and growing the business. I’m still mind blown when I think about it... 
+
+**Fun fact:** Our first automated client was a luxury hotel in Oslo. They now order 20+ pieces/month without a single email!”
+
+</aside>
+
+## The Brief (Project **description)**
+
+---
+
+Nordic Timber Collective needed a systemized way to manage wholesale clients and streamline the production-to-delivery pipeline for their handcrafted furniture, without compromising design/artisanal quality.
+
+Manual order processing (emails, spreadsheets, and PDFs) caused delays and errors with high-end clients like boutique hotels.
+
+![](https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+## The Challenge
+
+---
+
+Linnea was stuck manually handling wholesale orders, email back-and-forths with clients, chasing approvals, and tracking logistics. The business had reached a bottleneck—sales potential was capped by operational chaos.
+
+- 4-hour average response time to custom design requests
+- 23% order errors due to miscommunication
+- 14 manual steps from inquiry to production
+- 0% client self-service capabilities
+
+![](https://images.unsplash.com/photo-1531403009284-440f080d1e12?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+## The Strategy & Process
+
+---
+
+We designed an end-to-end **Automated Order Capture** and **Hands-Off Fulfillment** **Engine**:
+
+- Built a custom CRM that identifies high-value B2B leads from form submissions & auto-prioritizes them
+- Created a branded client portal where wholesale buyers select SKUs, submit design requests, and approve quotes
+- Integrated Airtable, Make, and email workflows for auto-invoicing, logistics handoffs, and follow-up
+- Built automated Slack alerts for production & shipping status updates
+- Set up a reorder engine where key clients can restock in 2 clicks—no emails required
+
+![](https://images.unsplash.com/photo-1531379410502-63bfe8cdaf6f?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb)
+
+## The Outcome
+
+---
+
+<aside>
+👉 **81%** of orders fully automated (zero human input)
+
+</aside>
+
+<aside>
+👉 **20+ pieces/month** ordered by a single B2B client—on full autopilot
+
+</aside>
+
+<aside>
+👉 **$140k saved** in labor/error costs
+
+</aside>
+
+<aside>
+👉 **63% faster** production cycle (14 days → 5.2 days)
+
+</aside>
+
+<aside>
+👉 3 new luxury hotel accounts signed within 45 days of launch
+
+</aside>
+
+<aside>
+👉 **9.7/10** client satisfaction score (previously 6.4)
+
+</aside>
+
+### **Benefits and Impact**
+
+---
+
+Nordic Timber now runs leaner and smarter. Linnea re-focused her time on design and vision. Production expanded without hiring more staff. They became more attractive to high-value B2B clients and even began licensing their workflow to other artisans.
+
+### 📸 One of the **Automations in Action**
+
+---
+
+*Client ordering with SKU-based logic, invoice sync & 2-click reorder backend.*
+
+
+
+
+
+We give our word
+
+## Why choose us?
+
+---
+
+**Well, By choosing us you get to Grow Your Business the right way,** Leveraging available tools to automate the tasks you're doing manually, ****Eliminate hours of work, while **Saving Time, and Get Way More Done!**
+
+**Our Guarantee:**
+
+We guarantee by working with us:
+
+<aside>
+🚀
+
+ *You cut your operational costs by **50%***
+
+</aside>
+
+<aside>
+🚀
+
+ *You see business growth and results within **30 days***
+
+</aside>
+
+<aside>
+🚀
+
+ *You save **20+ hours per week** of founder/team time*
+
+</aside>
+
+<aside>
+🚀
+
+ *Your business is **future proof** and setup the right way*
+
+</aside>
+
+<aside>
+🚀
+
+ *You're **100% satisfied** with the systems we build you*
+
+</aside>
+
+**Or we pay you for wasting your time. PERIOD!**
+
+ ***Diagnose My Operational Bottlenecks ➝*** 
+
+*(Note: This is purely a discovery call, not a sales call, we need to make sure we can help you before we proceed with anything)*
+
+---
+
+## What This Actually Looks Like
+
+This is not a random automation setup.
+
+It’s a **focused operational rebuild** designed to remove friction across the most critical parts of your backend.
+
+<aside>
+
+<aside>
+<img src="/icons/circle-one-eighth_gray.svg" alt="/icons/circle-one-eighth_gray.svg" width="40px" />
+
+### Phase 1 — 
+Operational Mapping
+
+</aside>
+
+<aside>
+
+We map the critical operational flows inside your agency, including:
+
+- Lead capture and qualification
+- Sales follow-up and conversion
+- Client onboarding
+- Delivery workflows
+- Internal coordination
+- Reporting and visibility
+
+This exposes the friction points, inefficiencies, and manual steps slowing the operation.
+
+*Most founders realize during this phase that their backend evolved through **patches rather than architecture.***
+
+</aside>
+
+<aside>
+<img src="/icons/circle-two-eighths_gray.svg" alt="/icons/circle-two-eighths_gray.svg" width="40px" />
+
+### Phase 2 — 
+System Architecture
+
+</aside>
+
+<aside>
+
+Once the operational flows are mapped, we redesign the backend structure.
+
+This includes defining:
+
+- the systems responsible for each stage of the business
+- how information flows between tools
+- where automation should replace manual coordination
+- how the team interacts with the system
+
+*The goal is to create **clean operational architecture**, not just scattered automations, where each system has a clear role and processes flow logically from start to finish.*
+
+</aside>
+
+<aside>
+<img src="/icons/circle-three-eighths_gray.svg" alt="/icons/circle-three-eighths_gray.svg" width="40px" />
+
+### Phase 3 — Infrastructure Build
+
+</aside>
+
+<aside>
+
+With the architecture defined, the systems are implemented.
+
+This typically includes:
+
+- lead capture and routing automations
+- automated follow-up sequences
+- client onboarding workflows
+- task creation and internal coordination systems
+- delivery workflow automation
+- reporting dashboards and operational visibility
+
+*Each system is built to connect with the others so the backend functions as a **single operational engine.***
+
+</aside>
+
+</aside>
+
+---
+
+<aside>
+
+<aside>
+<img src="/icons/circle-four-eighths_gray.svg" alt="/icons/circle-four-eighths_gray.svg" width="40px" />
+
+### Phase 4 — Automation & Process Integration
+
+</aside>
+
+<aside>
+
+Once the systems are in place, automation enforces the process.
+
+This is where the backend begins running **through systems instead of memory.**
+
+- Leads move automatically.
+- Clients trigger onboarding flows.
+- Teams receive structured tasks.
+- Updates are tracked in real time.
+
+*The goal is to reduce operational dependence on the founder.*
+
+</aside>
+
+<aside>
+<img src="/icons/circle-five-eighths_gray.svg" alt="/icons/circle-five-eighths_gray.svg" width="40px" />
+
+### Phase 5 — Operational Handoff
+
+</aside>
+
+<aside>
+
+After the rebuild, your team receives a clear operational structure.
+
+They understand:
+
+- where information lives
+- how workflows move forward
+- how the system handles coordination
+
+*The backend becomes something the business **runs through**, rather than something the founder constantly manages.*
+
+</aside>
+
+</aside>
+
+## The Result
+
+Instead of juggling tools, reminders, and manual coordination —
+
+✅ Your agency runs through **structured operational systems.**
+
+✅ Clients **onboard smoothly**.
+
+✅ Teams **execute clearly**.
+
+✅ And founders **regain time and visibility** inside the business.
+
+## Love from Our Clients
+
+<aside>
+🔥 **Tons of people/agencies** have used our Systems. Hear what some have to say.
+
+</aside>
+
+<aside>
+<img src="attachment:d42fe604-c305-4f76-941a-4d8bc6a4b7a8:download_3_124x124.jpeg" alt="attachment:d42fe604-c305-4f76-941a-4d8bc6a4b7a8:download_3_124x124.jpeg" width="40px" /> Linnea Vestergaard
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“We’re not just competing with the big-name furniture retailers, we’re outperforming them. Since implementing automations, we’ve been hitting sales targets faster than ever. Streamlining our processes has freed me up to focus on designing & crafting exceptional new pieces and growing the business. I’m still mind blown when i think about it...***
+
+***Fun fact: Our first automated client was a luxury hotel in Oslo. They now order 20+ pieces/month without a single email!”*** 
+
+- Founder **@Nordic Timber Collective**
+
+</aside>
+
+<aside>
+<img src="attachment:1558a899-173a-4d6f-9874-c207f0ab61a7:1621497125118-photoaidcom-cropped.jpeg" alt="attachment:1558a899-173a-4d6f-9874-c207f0ab61a7:1621497125118-photoaidcom-cropped.jpeg" width="40px" /> Hiroshi Tanaka
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“We were burning hours on client onboarding and data entry. CraftedWorkflows built automations that sliced our workload in half. It’s like having an extra team member, without the payroll.”***
+
+- AI Implementation Specialist **@TechBridge Japan**
+
+</aside>
+
+<aside>
+<img src="attachment:6e400199-8045-4adb-9170-9880771224ab:download_2_124x124-photoaidcom-cropped.jpeg" alt="attachment:6e400199-8045-4adb-9170-9880771224ab:download_2_124x124-photoaidcom-cropped.jpeg" width="40px" /> Lila Cohen
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“Our lead generation process was a nightmare to manage. They automated it end-to-end. My team can finally breathe.”***
+
+- Boutique Fitness Studio Owner **@AutoPilates Co.**
+
+</aside>
+
+<aside>
+<img src="https://prod-files-secure.s3.us-west-2.amazonaws.com/73205749-2d5e-4238-8147-65b6064577e3/5005dd33-38d3-4e18-91f5-8b6731a94a31/Mask_group-7.png" alt="https://prod-files-secure.s3.us-west-2.amazonaws.com/73205749-2d5e-4238-8147-65b6064577e3/5005dd33-38d3-4e18-91f5-8b6731a94a31/Mask_group-7.png" width="40px" /> Mateo "Matt" Ricci
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“We were drowning in client revisions and asset management until CraftedWorkflows automated our entire design pipeline. Now, client feedback gets organized automatically, files sync between Figma and our project management tool, and even our invoice approvals are handled by AI. We’ve cut project delivery time by 40% and finally have bandwidth to take on more high-ticket clients.***
+
+***P.S. Our team renamed the AI bot ‘Pixel’, it’s basically our 5th designer now.”***
+
+- Creative Director **@Lumina Design Studio**
+
+</aside>
+
+<aside>
+<img src="attachment:48160b93-e686-4499-914d-84e794a81356:1725243571768-photoaidcom-cropped.png" alt="attachment:48160b93-e686-4499-914d-84e794a81356:1725243571768-photoaidcom-cropped.png" width="40px" /> Amara Okoro
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“Not everything worked perfectly from day one, but the CraftedWorkflows team was relentless about making it right. Their dedication is unmatched.”***
+
+- Digital Marketing Agency Owner **@Bloom Creative**
+
+</aside>
+
+<aside>
+<img src="attachment:f0acfd28-a8d7-4a50-8b80-6acbe67f3d95:994c18cb-e79a-4fa4-864c-a7c673085993_1_124x124-photoaidcom-cropped.jpeg" alt="attachment:f0acfd28-a8d7-4a50-8b80-6acbe67f3d95:994c18cb-e79a-4fa4-864c-a7c673085993_1_124x124-photoaidcom-cropped.jpeg" width="40px" /> Leilani Kealoha
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“CraftedWorkflows has been a lifesaver. I’m only a year into restarting my global fashion brand business, and their automations have freed up so much of my time. Knowing that tasks like following up on collab deals or setting up Facebook ads are handled automatically means I can focus on serving my clients and growing my business. It’s like a huge weight off my shoulders.”***
+
+- Sustainable Fashion Brand CEO **@EcoStitch Dakar**
+
+</aside>
+
+<aside>
+<img src="attachment:4cc88067-16d8-4740-827e-429c13b58554:1729246731463-photoaidcom-cropped.png" alt="attachment:4cc88067-16d8-4740-827e-429c13b58554:1729246731463-photoaidcom-cropped.png" width="40px" /> Fatima Al-Mansoori
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“Honestly, it felt complicated at first & The setup process took longer than expected. But CraftedWorkflows broke it down and handled the heavy lifting. Once it was live, the efficiency boost was insane. The results speak for themselves.”***  
+
+- HR Tech Startup CEO **@TalentFlow**
+
+</aside>
+
+<aside>
+<img src="attachment:f24fcb0b-5bbf-4075-9ac5-c8da8b1f7d88:1723771062838-photoaidcom-cropped.png" alt="attachment:f24fcb0b-5bbf-4075-9ac5-c8da8b1f7d88:1723771062838-photoaidcom-cropped.png" width="40px" /> Priya Kapoor
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“I’ll be honest, I was skeptical. Everyone promises the world when it comes to automation. But with CraftedWorkflows, the difference is tangible. I used to spend hours pulling analytics and generating reports. Now, it’s all automatic. The time I’ve saved? Insane. If you’re on the fence—just do it.”***
+
+- SaaS Customer Success Consultant **@Nexus Labs**
+
+</aside>
+
+<aside>
+<img src="attachment:209170a4-7164-4c57-b3cf-4787cc3eecdd:ecded514-8844-442f-9056-7fa77f557c83_124x124-photoaidcom-cropped.jpeg" alt="attachment:209170a4-7164-4c57-b3cf-4787cc3eecdd:ecded514-8844-442f-9056-7fa77f557c83_124x124-photoaidcom-cropped.jpeg" width="40px" /> Diego Herrera
+
+---
+
+⭐⭐⭐⭐⭐
+
+***“I never thought I’d say this, but automating my sales funnel was the best decision I made this year. The ROI speaks for itself..”***
+
+- SEO Agency Founder **@OptimizedEmpire**
+
+</aside>
+
+ ***Diagnose My Operational Bottlenecks ➝*** 
+
+*Almost all founders discover around 3-7 hidden bottlenecks during the audit.*
+
+---
+
+# Your next step is simple.
+
+Right now your business is growing.
+
+But your backend hasn’t caught up.
+
+Which means one of two things will happen.
+
+Either:
+
+1️⃣ You install infrastructure before growth exposes the cracks.
+
+Or:
+
+2️⃣ Growth forces you to hire more people just to hold the system together.
+
+### The Automation Escape Audit shows you which path you're on + *Where you’re leaking time & money*
+
+No pitch. No selling.
+
+If it’s a fit, we discuss implementation.
+
+If not, you leave with clarity.
+
+ ***Diagnose My Operational Bottlenecks ➝*** 
+
+30 minutes  •  Founder-led  •  Zero obligation
+
+<aside>
+<img src="/icons/star-of-life_gray.svg" alt="/icons/star-of-life_gray.svg" width="40px" />
+
+# What Happens During The Automation Escape Audit
+
+---
+
+**✅ Step 1 — We re-map your current workflows**
+*Where leads enter, how clients move through delivery,
+and where operations depend on manual coordination.*
+
+---
+
+**✅ Step 2 — We identify the operational bottlenecks**
+*The exact points where revenue slows down,
+tasks get delayed, or the team depends on you.*
+
+---
+
+**✅ Step 3 — We recommend / design the replacement system**
+*What should be automated, what should stay human,
+and where the highest leverage exists.*
+
+---
+
+**✅ Step 4 — You receive a system blueprint + clear next steps** 
+*Even if we never work together.*
+
+---
+
+⏱ Duration: **30 minutes**
+💰 Cost: **Free**
+
+</aside>
+
+---
+
+## So, are we a good fit?!
+
+*This Is Not For Everyone*
+
+### This is NOT for you if…
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You are a **solo freelancer** without a team or delivery structure
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You’re ***not generating $10k+/month*** with your business yet
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> Your agency is still **figuring out how to get clients**
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You *enjoy* drowning in spreadsheets, manual follow-ups, and chaotic workflows
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You’re looking for **templates instead of real infrastructure**
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You expect a quick tool setup instead of a **serious backend rebuild**
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You’re unwilling to give backend access for real optimization
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You think “automation” just means slapping a chatbot on your website
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> You’d rather waste 20+ hours/week on busywork than invest in growth
+
+</aside>
+
+<aside>
+<img src="/icons/clear_red.svg" alt="/icons/clear_red.svg" width="40px" /> If your operations don’t yet justify a system rebuild, this will not be useful.
+
+</aside>
+
+### This is FOR you if…
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> You have ***2–15 team members*** involved in delivery or operations
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> You’re ***already clearing $10k*–$100k*+/month*** but feel trapped in operational chaos
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> You are actively closing clients every month **(Inbound / Outbound)**
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> You’re experiencing admin overload, delivery friction, or backend chaos
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> Client onboarding still involves **manual coordination, emails, or Slack chaos**
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> Internal tasks still require **constant founder oversight**
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> Tools like CRM, Notion, Slack, or project systems exist, *but don’t fully connect*
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> You crave *scalable processes* but lack time/expertise to build them
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> You’re a Founder still involved in tasks they shouldn’t be touching
+
+</aside>
+
+<aside>
+<img src="/icons/verified_blue.svg" alt="/icons/verified_blue.svg" width="40px" /> In short: Your agency **makes real money**, but the backend hasn’t caught up with the growth.
+
+</aside>
+
+## If That Sounds Like You
+
+ ***Diagnose Your Operational Bottlenecks ➝*** 
+
+*(Warning: By this time next month, you’ll wonder how you ever worked without us)*
+
+---
+
+## Still got concerns?
+
+We get these questions often.
+
+- I'm just getting started with my business, **is this right for me**?
+    
+    ---
+    
+    We're perfect for businesses that have already got a flow of leads coming in, they understand what they're selling, who they're selling it too, but their sales systems are manual and broken.
+    
+    If you're just getting started in your business it is however important to get this right early on. So please schedule your call, complete the form and we can provide you with the best next steps to set you up for success.
+    
+
+---
+
+- What **types of businesses can benefit** from your services?
+    
+    ---
+    
+    We work with agencies, consultants, creative solopreneurs, e-commerce stores, and service-based businesses. 
+    
+    If your business involves repeatable tasks, or complex workflows, we can help you automate them for maximum efficiency.
+    
+
+---
+
+- How do I know **if automation is right** for my business?
+    
+    ---
+    
+    If you’re even slightly overwhelmed by repetitive tasks or struggling to scale your operations, automation is likely the answer. Book a consultation with us, and we’ll help you identify the best areas to optimize.
+    
+
+---
+
+- Explain the process of **how we can work together**
+    
+    ---
+    
+    **1.** We start with a consultation to understand your needs and goals.
+    
+    **2.** We discuss the Project You Have
+    
+    **3.** We Will Provide a Scope of Work and Costs
+    
+    **4.** If You Accept, You'll Need to Pay 50% Upfront and 50% At Delivery
+    
+    **5.** Then, we map out your workflows, identify areas for improvement, and build custom automations using platforms like Make (formerly Integromat) and Notion. 
+    
+    **6.** Once implemented, we test everything to ensure it's running smoothly before handing it over to you.
+    
+
+---
+
+- I still dont get it, What exactly can you **automate for me**
+    
+    ---
+    
+    **Short answer:** We automate the repetitive tasks that eat up your team’s time, so you can focus on what actually grows your business.
+    
+    **Think of it like this:**
+    
+    1. **Core activities** = What makes you money (e.g., closing sales, creating products).
+    2. **Supporting tasks** = The boring, repetitive work that enables those core activities (e.g., sending invoices, scheduling meetings).
+    
+    We automate the *supporting tasks* so you can do *more* of the money-making work.
+    
+    ---
+    
+    ### **Real-World Automation Examples**
+    
+    **Simple (Quick Wins)**
+    
+    1. **Auto-responders** – Instant replies to customer inquiries (e.g., FAQs, booking confirmations).
+    2. **Social media scheduling** – Auto-posting your content across platforms.
+    3. **Expense tracking** – Auto-categorizing receipts from emails.
+    
+    **Medium (Bigger Time-Savers)**
+    
+    4. **Lead sorting** – Auto-tagging & prioritizing sales leads from forms/emails.
+    
+    5. **Client onboarding** – Auto-sending contracts, invoices, and welcome packets.
+    
+    6. **Review collection** – Auto-requesting feedback after a purchase/service.
+    
+    7. **Internal Q&A bot** – Instant answers for team questions (e.g., HR policies, project status).
+    
+    **Complex (Game-Changing Systems)**
+    
+    8. **AI sales assistant** – Qualifies leads, books meetings, and follows up *for you*.
+    
+    9. **Automated content creation** – Turns webinar transcripts into blogs, social posts, and emails.
+    
+    10. **Custom reporting dashboards** – Pulls data from 10+ tools into one real-time report.
+    
+    11. **Self-updating CRM** – Logs calls, emails, and deals *without manual entry*.
+    
+    12. **AI customer support** – Resolves 50%+ of tickets *before* your team sees them.
+    
+    ---
+    
+    **Not sure where to start?**
+    
+    We’ll audit your business and find the *highest-impact* automations for you.
+    
+    **Book a free consult** to see what’s possible.
+    
+
+---
+
+- Will I be able to **use my current software?**
+    
+    ---
+    
+    Our solutions allows you to condense all of the software you're paying for into 1 place. We can also port all lead information and systems you have into the platform we've built and use.
+    
+    **However**, if you wish to remain on your current platform or keep elements of a system, you can. We can integrate into any major platforms.
+    
+
+---
+
+- What platforms do you mostly / regularly **integrate** with?
+    
+    ---
+    
+    We can integrate with platforms like Notion, Make.com, Zapier, Airtable, Google Workspace, Slack, and many more. 
+    
+    If you’re using a specific tool, we can probably automate it.
+    
+
+---
+
+- **How long** does it take (from start to seeing results)?
+    
+    ---
+    
+    We go from planning and strategy to build and implementation within 30 days. 
+    
+    At the end of 30 days you will be using your new sales system, scheduling appointments, taking sales calls and closing new clients.
+    
+
+---
+
+- Will you need me **learn complicated tools**?
+    
+    ---
+    
+    Not at all. We handle all the technical setup for you.
+    
+
+---
+
+- What **if I don’t like the automation** setup?
+    
+    ---
+    
+    We'll work for free for you (until you are)...
+    
+    We work closely with you throughout the process to ensure you’re happy with the result. 
+    
+    Plus, we offer support to fine-tune things if needed.
+    
+
+---
+
+- One more thing, Do you **guarantee results**?
+    
+    ---
+    
+    We do NOT guarantee REVENUE results. 
+    
+    However we do guarantee you will have the option to remove yourself from your sales process and we **DO Guarantee** major improvements to your lead qualification and management,  amongst other areas of your business operations.
+    
+
+---
+
+- I’m sold… So now, what is the **Next Steps**?
+    
+    ---
+    
+    The next step is for you to book in your demo call with the team, on this call we'll exclusively be reviewing your current system, giving you advice and feedback. 
+    
+    We'll also introduce you to our services and if we're a good fit you have the option of working with us.
+    
+
+---
+
+## Zero risk. Zero pressure.
+
+This is a diagnostic call - not a sales trap.
+
+If there’s a fit, I’ll tell you.
+If there’s not, you’ll still leave with clarity and a system-level plan.
+
+## Ready to escape manual scale?
+
+ ***Diagnose My Operational Bottlenecks ➝*** 
+
+*Limited spots per week - to ensure quality.*
+
+### *You don’t need to work harder.
+You need a better farm 🐐.*
+
+!15..jpg
+
+**GET IN TOUCH**
+
+---
+
+Email: craftedworkflows@gmail.com
+
+Twitter: twitter.com/preciousnwosu_
+
+Linkedin: linkedin.com/in/preciousnwosudesigns
+
+Insta: instagram.com/craftedworkflows_
+
+Store: officialnotionnaija.gumroad.com/
+
+**IF WE’VE WORKED TOGETHER**
+
+---
+
+Looking forward to hearing your feedback. Do not hesitate to contact me for help, feedback, critique, or anything else. 
+
+If you really liked our work together, you can share a testimonial below ↓
+
+©️ This website has been ***Built with ❤️ by* NotionNaija*.***
+
+---

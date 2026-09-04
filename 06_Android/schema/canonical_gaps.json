@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-09-01T00:00:00+01:00",
+  "gaps": {
+    "1": {
+      "gap_index": 1,
+      "platform": "linkedin",
+      "capability": "cold_dm",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "LI cold DM — no API support in Zernio (PLATFORM_NOT_SUPPORTED) or Composio."
+    },
+    "2": {
+      "gap_index": 2,
+      "platform": "x",
+      "capability": "cold_dm",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "X DM — Arcade X has no DM-send tool; Composio untested."
+    },
+    "3": {
+      "gap_index": 3,
+      "platform": "x",
+      "capability": "media_tweet",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "X media tweet — Arcade X_PostTweet has no media support yet; Zernio can post twitter text but media gap remains."
+    },
+    "4": {
+      "gap_index": 4,
+      "platform": "x",
+      "capability": "follow_unfollow",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "X follow/unfollow — not exposed by Arcade X's 39 tools."
+    },
+    "5": {
+      "gap_index": 5,
+      "platform": "linkedin",
+      "capability": "connection_request",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "LI connection request — no Zernio/Composio support."
+    },
+    "6": {
+      "gap_index": 6,
+      "platform": "linkedin",
+      "capability": "people_search",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "LI people search — Composio linkedin_search_people untested; treat as gap until verified."
+    },
+    "7": {
+      "gap_index": 7,
+      "platform": "instagram",
+      "capability": "cold_dm",
+      "provider": "native_android",
+      "fallback": "autoinput",
+      "notes": "IG cold DM — Zernio IG is reactive only (reply/comment automation); no cold DM."
+    }
+  }
+}

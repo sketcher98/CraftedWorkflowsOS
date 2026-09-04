@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CraftedWorkflowsCanonicalGaps",
+  "description": "Canonical indexed source of truth for the 7 confirmed API gaps. gap_index is stable: once assigned, never reassign. This file is version-controlled data (memory-as-code Hot tier).",
+  "type": "object",
+  "required": ["version", "updated_at", "gaps"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0.0" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "gaps": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/gap" }
+    },
+    "$defs": {
+      "gap": {
+        "type": "object",
+        "required": ["gap_index", "platform", "capability", "provider", "fallback"],
+        "properties": {
+          "gap_index": { "type": "integer", "minimum": 1, "maximum": 7 },
+          "platform": { "type": "string" },
+          "capability": { "type": "string" },
+          "provider": { "type": "string", "enum": ["arcade", "zernio", "composio", "native_android"] },
+          "fallback": { "type": "string", "enum": ["autoinput", "adb", "none"] },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}
