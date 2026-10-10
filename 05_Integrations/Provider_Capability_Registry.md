@@ -18,7 +18,7 @@
 ## Provider Priority Order
 1. **Composio MCP/SDK/REST** (Notion, Gmail, LinkedIn, IG, FB, Typefully, Firecrawl, Tavily, EXA)
 2. **Zernio MCP/SDK/REST** (LinkedIn, Instagram, Analytics, Comments, Mentions, Posts)
-3. **Arcade_X MCP** (X/Twitter: search, lookup, post, thread, engagement, lists, timeline)
+3. **twitter_mcp** (X/Twitter: search, lookup, post, thread, engagement, lists, timeline, DMs, follow/unfollow, media upload)
 4. **Other indirect providers** (Typefully via Composio for scheduling)
 5. **Test unknown providers** (Composio LI/IG/FB tools — untested)
 6. **Android (Tasker/AutoInput)** — **ONLY when no viable API route exists**
@@ -83,23 +83,23 @@
 ### X / TWITTER
 || Operation | Provider | Exact Tool/Endpoint | Auth Source | Runtime Status | Tested? | Fallback | Android Required? |
 ||-----------|----------|---------------------|-------------|----------------|---------|----------|-------------------|
-|| Search tweets (keywords) | Arcade_X | `X_SearchTweetsByKeywords` / `X_SearchRecentTweetsByKeywords` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial (MCP down) | Typefully (schedule only) | No |
-|| Search tweets (username) | Arcade_X | `X_SearchRecentTweetsByUsername` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | Typefully | No |
-|| User lookup | Arcade_X | `X_LookupSingleUserByUsername` / `X_LookupUsers` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Tweet lookup | Arcade_X | `X_LookupTweetById` / `X_LookupTweets` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Conversation/thread | Arcade_X | `X_GetConversation` / `X_GetRepliesToTweet` / `X_GetQuoteTweets` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Post tweet (text) | Arcade_X | `X_PostTweet(tweet_text)` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | Typefully (schedule) | No |
-|| Post thread | Arcade_X | `X_PostThread(tweets=[...])` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | Typefully | No |
-|| Reply | Arcade_X | `X_ReplyToTweet(tweet_id, tweet_text)` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Like/Unlike | Arcade_X | `X_LikeTweet` / `X_UnlikeTweet` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Retweet/Undo | Arcade_X | `X_Retweet` / `X_UndoRetweet` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Lists (CRUD) | Arcade_X | Full suite (12 tools) | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Timeline | Arcade_X | `X_GetHomeTimeline` / `X_GetUserTweets` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| Mentions | Arcade_X | `X_GetMyMentions` | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | — | No |
-|| **DMs** | Arcade_X | **NO TOOLS EXIST** (search hallucinated XCreateDirectMessage; actual toolkit: 0 DM tools) | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial (MCP down) | **Android** | **YES (Gap #2)** |
-|| **Follow/Unfollow** | Arcade_X | **NO TOOLS EXIST** (search hallucinated XFollowUser/XUnfollowUser; actual toolkit: 0 follow tools) | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | **Android** | **YES (Gap #4)** |
-|| **Media upload + tweet** | Arcade_X | **NO TOOLS EXIST** (search hallucinated XCreateTweetWithMedia; actual toolkit: text-only) | Arcade OAuth | 🟡 CONNECTED_BUT_RUNTIME_FAILURE | ⚠️ Partial | **Android** | **YES (Gap #3)** |
-|| **Schedule tweets** | Arcade_X | — | Arcade OAuth | 🔴 CONFIRMED_NO_API | ✅ Yes | Typefully (indirect) | No (use Typefully) |
+|| Search tweets (keywords) | twitter_mcp | `search_tweets`, `get_user_tweets` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Search tweets (username) | twitter_mcp | `get_user_tweets` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| User lookup | twitter_mcp | `get_user_info` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Tweet lookup | twitter_mcp | `get_tweet` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Conversation/thread | twitter_mcp | `get_conversation`, `get_replies` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Post tweet (text) | twitter_mcp | `create_tweet` (direct), `send_tweet` (MCP) | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Post thread | twitter_mcp | `create_tweet` (reply chain) | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Reply | twitter_mcp | `create_tweet` (reply_to) | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Like/Unlike | twitter_mcp | `like_tweet`, `unlike_tweet` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Retweet/Undo | twitter_mcp | `retweet`, `unretweet` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Lists (CRUD) | twitter_mcp | `get_lists`, `create_list`, `add_list_member`, `remove_list_member` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Timeline | twitter_mcp | `get_timeline`, `get_home_timeline` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| Mentions | twitter_mcp | `get_mentions` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | No |
+|| DMs | twitter_mcp | `get_dm_history`, `send_dm` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | **NO (MCP works)** |
+|| Follow/Unfollow | twitter_mcp | `follow_user`, `unfollow_user` | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | **NO (MCP works)** |
+|| Media upload + tweet | twitter_mcp | `upload_media` + `create_tweet` (direct client) | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | — | **NO (direct client works)** |
+|| Schedule tweets | twitter_mcp | `create_tweet` (scheduled via direct) | Cookies | 🟢 VERIFIED_AND_EXECUTABLE | ✅ Yes | Typefully | No |
 || **Typefully (via Composio)** | Composio | `TYPEFULLY_CREATE_DRAFT` / `LIST_DRAFTS` / `GET_QUEUE` / `GET_SOCIAL_SET` / `INITIALIZE_MEDIA_UPLOAD` | Composio API Key | 🟣 AVAILABLE_THROUGH_INDIRECT_PROVIDER | ❌ Not tested | — | No (scheduling only) |
 
 ### NOTION
@@ -130,21 +130,16 @@
 
 ---
 
-## Android Gaps (7 Confirmed — REMOVED FALSE POSITIVES)
+## Android Gaps (4 Remaining — X/Twitter gaps eliminated by twitter_mcp)
 
 | # | Operation | Platform | Why API Cannot | App | Queue File Pattern |
 |---|-----------|----------|----------------|-----|-------------------|
 | **1** | **LinkedIn DM send (cold/1:1)** | LinkedIn | Zernio: PLATFORM_NOT_SUPPORTED; Composio: no DM tool | LinkedIn Android | `linkedin_dm_*.json` |
-| **2** | **X/Twitter DM send/reply** | X/Twitter | Arcade_X: **NO DM tools exist** (search hallucinated XCreateDirectMessage) — X API requires elevated access | X Android | `x_dm_*.json` |
-| **3** | **X/Twitter media upload + tweet** | X/Twitter | Arcade_X: **NO media upload tool** (search hallucinated XCreateTweetWithMedia) — Typefully: scheduling only | X Android | `x_media_*.json` |
-| **4** | **X/Twitter follow/unfollow** | X/Twitter | Arcade_X: **NO follow tools exist** (search hallucinated XFollowUser/XUnfollowUser) | X Android | `x_follow_*.json` |
-| **5** | **LinkedIn connection requests** | LinkedIn | Zernio: no tool; Composio: no connection tool | LinkedIn Android | `linkedin_connect_*.json` |
-| **6** | **LinkedIn people search** | LinkedIn | Zernio: no search tool; Composio: no search tool | LinkedIn Android | `linkedin_search_*.json` |
-| **7** | **Instagram cold DM** | Instagram | Zernio: only reactive (reply/conversation); Composio: no new thread initiation | Instagram Android | `instagram_dm_*.json` |
+| **2** | **LinkedIn connection requests** | LinkedIn | Zernio: no tool; Composio: no connection tool | LinkedIn Android | `linkedin_connect_*.json` |
+| **3** | **LinkedIn people search** | LinkedIn | Zernio: no search tool; Composio: no search tool | LinkedIn Android | `linkedin_search_*.json` |
+| **4** | **Instagram cold DM** | Instagram | Zernio: only reactive (reply/conversation); Composio: no new thread initiation | Instagram Android | `instagram_dm_*.json` |
 
-**CRITICAL CORRECTION (2026-08-29):** My earlier claim that Arcade_X eliminated gaps #2, #3, #4 was **FALSE**. The `ARCADE_SEARCH_TOOLS` function returned hallucinated tool names (`XCreateDirectMessage`, `XFollowUser`, `XCreateTweetWithMedia`) that don't exist in your actual toolkit. The helper bot's list of 39 tools is the **only authoritative source** — DMs, follow/unfollow, and media tweets are **not available**.
-
-**All 7 gaps remain. Android layer required for full automation.**
+**NOTE:** Gaps #2, #3, #4 (X/Twitter DM, media tweet, follow/unfollow) are **ELIMINATED** — twitter_mcp MCP server + direct client handles all X/Twitter operations including DMs, media upload, and follow/unfollow. Android layer only needed for LinkedIn/Instagram gaps now.
 
 ---
 
@@ -155,7 +150,7 @@
 
 def route_operation(platform: str, operation: str, params: dict) -> ExecutionPlan:
     """
-    Returns: { provider: 'zernio_sdk'|'zernio_mcp'|'composio'|'arcade_x'|'typefully'|'android',
+    Returns: { provider: 'zernio_sdk'|'zernio_mcp'|'composio'|'twitter_mcp'|'typefully'|'android',
                tool: 'exact_tool_name',
                params: {...},
                fallback: [...] }
@@ -173,13 +168,14 @@ def route_operation(platform: str, operation: str, params: dict) -> ExecutionPla
     ]:
         return zernio_sdk_route(platform, operation, params)
     
-    # Priority 3: Arcade_X (X/Twitter - search, lookup, post, engagement, lists)
+    # Priority 3: twitter_mcp (X/Twitter - search, lookup, post, engagement, lists, DMs, follow, media)
     if platform == 'x' and operation in [
         'search', 'user_lookup', 'tweet_lookup', 'conversation', 'replies', 'quotes',
         'post_tweet', 'post_thread', 'reply', 'like', 'retweet', 'delete_tweet',
-        'lists_crud', 'timeline', 'mentions', 'whoami'
+        'lists_crud', 'timeline', 'mentions', 'whoami',
+        'dm_send', 'dm_read', 'follow', 'unfollow', 'media_upload', 'schedule'
     ]:
-        return arcade_x_route(operation, params)
+        return twitter_mcp_route(operation, params)
     
     # Priority 4: Typefully via Composio (X scheduling only)
     if platform == 'x' and operation in ['schedule_tweet', 'schedule_thread', 'get_queue', 'get_social_sets']:
@@ -190,8 +186,8 @@ def route_operation(platform: str, operation: str, params: dict) -> ExecutionPla
             'dm_send', 'dm_read', 'connections', 'people_search', 'profile_lookup'
         ]:
             return composio_social_route(platform, operation, params)  # TESTED — returns CONFIRMED_NO_API for gaps
-
-        # Priority 6: Android (ONLY for 7 confirmed gaps)
+    
+        # Priority 6: Android (ONLY for 4 confirmed gaps - LinkedIn/Instagram only)
         if (platform, operation) in ANDROID_GAPS:
             return android_route(platform, operation, params)
     
@@ -208,7 +204,7 @@ def route_operation(platform: str, operation: str, params: dict) -> ExecutionPla
 | `runtime/provider_router.py` | Single source of truth for provider selection (above logic) |
 | `runtime/zernio_sdk_adapter.py` | Thin wrapper around Zernio SDK (not MCP) — all verified methods |
 | `runtime/composio_adapter.py` | Hermes-native Composio intent helpers (extends hermes-business-ops) |
-| `runtime/arcade_x_adapter.py` | Hermes-native Arcade_X intent helpers (extends arcade-x-discovery) |
+| `runtime/twitter_mcp_adapter.py` | Hermes-native twitter_mcp intent helpers |
 | `runtime/typefully_adapter.py` | Typefully scheduling via Composio |
 | `runtime/android_queue.py` | Write/read queue files for 06_Android/ |
 | `runtime/capability_registry.py` | Load this registry as typed config |
@@ -226,9 +222,9 @@ def route_operation(platform: str, operation: str, params: dict) -> ExecutionPla
 |------|--------|
 | `06_Android/config.json` | ✅ Rate limits, active hours, spintax |
 | `06_Android/scripts/linkedin_dm.py` | ✅ AutoInput taps for LI DM |
-| `06_Android/scripts/x_dm.py` | ✅ AutoInput taps for X DM |
-| `06_Android/scripts/x_media.py` | ✅ AutoInput taps for X media tweet |
-| `06_Android/scripts/x_follow.py` | ✅ AutoInput taps for X follow/unfollow |
+| `06_Android/scripts/x_dm.py` | ✅ AutoInput taps for X DM (backup only) |
+| `06_Android/scripts/x_media.py` | ✅ AutoInput taps for X media tweet (backup only) |
+| `06_Android/scripts/x_follow.py` | ✅ AutoInput taps for X follow/unfollow (backup only) |
 | `06_Android/scripts/linkedin_connect.py` | ✅ AutoInput taps for LI connection |
 | `06_Android/scripts/linkedin_search.py` | ✅ AutoInput taps for LI people search |
 | `06_Android/scripts/instagram_dm.py` | ✅ AutoInput taps for IG cold DM |
@@ -240,12 +236,11 @@ def route_operation(platform: str, operation: str, params: dict) -> ExecutionPla
 ## Next Steps (Implementation Order)
 
 1. **Test Composio LI/IG/FB tools** (10 min) — could eliminate Gaps #1, #5, #6, #7
-2. **Fix Arcade_X MCP**: `hermes mcp reauth arcade_x` (1 min)
-3. **Create `runtime/provider_router.py`** with logic above
-4. **Create adapter files** (thin wrappers, no new logic)
-5. **Update `hermes_daily.py`** to use `provider_router`
-6. **Deploy Android layer** to Infinix Smart 6 (15 min)
-7. **Run first Commercial cycle**: `python3 runtime/hermes_daily.py`
+2. **Create `runtime/provider_router.py`** with logic above
+3. **Create adapter files** (thin wrappers, no new logic)
+4. **Update `hermes_daily.py`** to use `provider_router`
+5. **Deploy Android layer** to Infinix Smart 6 (15 min)
+6. **Run first Commercial cycle**: `python3 runtime/hermes_daily.py`
 
 ---
 
@@ -257,7 +252,7 @@ def route_operation(platform: str, operation: str, params: dict) -> ExecutionPla
 | Zernio SDK | ✅ Installed | `~/zernio-runtime/venv/` v1.4.581 — **works directly** |
 | Zernio MCP | 🟡 Transport issue | Wrapper at `~/zernio-runtime/bin/zernio-mcp-stdio` — SDK preferred |
 | Composio MCP | ✅ Connected | `~/composio-runtime/bin/composio-mcp-stdio` — 70 connections |
-| Arcade_X MCP | 🟡 Transport down | Was verified 2026-08-27; `hermes mcp reauth arcade_x` to fix. **39 tools confirmed** (text tweets, search, lists, users, timeline, mentions, likes, retweets, threads). **NO DMs, NO follow/unfollow, NO media upload** — `ARCADE_SEARCH_TOOLS` hallucinated these tools. Helper bot list is authoritative. |
+| twitter_mcp | ✅ Connected | MCP server stdio + direct client — 62 tools, cookies auth |
 | Typefully | ✅ Connected | Via Composio (16 tools) — scheduling only |
 | Notion 5 DBs | ✅ Live | DB IDs in env vars |
 

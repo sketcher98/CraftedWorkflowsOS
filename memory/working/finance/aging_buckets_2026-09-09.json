@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-09",
+  "current": 0,
+  "1_30": 0,
+  "31_60": 0,
+  "61_90": 0,
+  "90_plus": 0,
+  "total_outstanding": 0,
+  "invoice_count": 0,
+  "client_count": 0,
+  "source": "Notion CRM query + aging_report_2026-09-09.md",
+  "generated_by": "billing_invoicing_specialist_cron"
+}

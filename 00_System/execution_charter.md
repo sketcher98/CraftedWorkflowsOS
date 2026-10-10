@@ -24,7 +24,7 @@ Anything reversible, internal, or already governed by a playbook:
 - Reading, writing, and updating Notion records (leads, tasks, meeting notes)
 - Classifying replies (green/yellow/red) and scheduling the next follow-up
 - Reporting status, flagging blockers, updating `company_state.md`
-- Posting to X/Twitter via Arcade_X (content drafts approved by playbook)
+- Posting to X/Twitter via twitter_mcp (content drafts approved by playbook)
 - Creating LinkedIn/Instagram drafts via Zernio (send still Tier 2)
 
 Just do these. Log them. Move on.

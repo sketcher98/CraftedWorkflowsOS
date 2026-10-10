@@ -13,7 +13,7 @@ and `05_Integrations/Active_Setup.md`.*
 subagents (`delegate_task`) or cron jobs (`cronjob`), never separate profiles.**
 
 Rationale (from `Active_Setup.md` + device constraints in `06_Android/config.json`):
-- All integrations are API-key-auth at profile level (Zernio, Composio, Arcade_X).
+- All integrations are API-key-auth at profile level (Zernio, Composio, twitter_mcp).
   Subagents inherit the parent's tools; separate profiles would need re-auth/dup keys.
 - Infinix Smart 6 / 2GB RAM: N profiles = N× memory+context tax. One profile per
   department is the only layout that survives the device.

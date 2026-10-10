@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-13T04:10:37.396962",
+  "cash": 0,
+  "forecast_inflows": 14982,
+  "forecast_outflows": 3000,
+  "net": 11982,
+  "runway_weeks": 0,
+  "status": "CRITICAL",
+  "forecast_file": "cash_forecast_37_13wk.json",
+  "escalation_file": "escalations/escalation_2026-09-13_runway_critical.md",
+  "escalation_triggered": true,
+  "escalation_targets": ["Finance Director", "COO"]
+}

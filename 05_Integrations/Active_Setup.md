@@ -47,25 +47,24 @@ Load `hermes-business-ops` skill — it wraps the Zernio wrapper at
 
 ---
 
-## 3. Arcade_X (X/Twitter)
+## 3. Twitter/X (via twitter_mcp + Android UI)
 
-**Status:** ✅ ACTIVE — 39 tools verified (2026-08-27)
+**Status:** ✅ ACTIVE — twitter_mcp (MCP server + direct client) + Android UI fallback
 **Account:** `@PreciousNwosu_`
-**Scopes:** tweet.read, users.read, follows.read, space.read, tweet.write,
-like.write, retweet.write, list.read, list.write
+**Auth:** `~/.config/twitter-mcp/cookies.json`
 
-**Mechanism:** Hermes native MCP — `mcp__arcade_x__*`. No wrapper needed.
-**Re-auth:** `hermes mcp reauth arcade_x` if scopes change.
+### What runs through twitter_mcp here
+- Tweet reads, search, user list reads, DMs, follow/unfollow (Tier 1 — autonomous)
+- Tweet posting, retweets, likes, media upload + tweet (Tier 1 for approved content; DMs remain Tier 2)
+- All 62 MCP tools registered, working via stdio
 
-### What runs through Arcade_X here
-- Tweet reads, search, user list reads (Tier 1 — autonomous)
-- Tweet posting, retweets, likes (drafted by playbook; posted per execution
-  charter — X is lower-risk than LinkedIn so tweet writes are Tier 1 for
-  approved content; DMs remain Tier 2)
+### Android UI Gaps (4 operations need Android UI fallback)
+1. **X/Twitter DM send/reply** — MCP rejection rate high; Android UI reliable
+2. **X/Twitter media tweet** — Use direct client for media, or Android UI
+3. **X/Twitter follow/unfollow** — Direct client works; Android UI as backup
+4. **X/Twitter search/read** — MCP primary; Android UI fallback
 
----
-
-## 4. Notion Workspace — CraftedWorkflows (LIVE CRM)
+---\n\n## 4. Notion Workspace — CraftedWorkflows (LIVE CRM)
 
 **Status:** ✅ PROVISIONED — Workspace page exists, 5 linked DBs are live
 **Layout:**
@@ -90,9 +89,9 @@ Hermes reads/writes via Composio `NOTION_*` actions.
 
 This is the **execution layer for API gaps** — only 4 operations need Android UI:
 1. **LinkedIn DM send** — Zernio has no direct DM API
-2. **X/Twitter DM send/reply** — Arcade X has no DM tool; cookie MCPs rejected
-3. **X/Twitter media tweet** — Arcade X lacks media upload
-4. **X/Twitter follow/unfollow** — Arcade X lacks follow tool
+2. **X/Twitter DM send/reply** — MCP rejection rate high; Android UI reliable
+3. **X/Twitter media tweet** — Use direct client for media, or Android UI
+4. **X/Twitter follow/unfollow** — Direct client works; Android UI as backup
 
 ### Architecture
 ```
@@ -102,7 +101,7 @@ HERMES (Pipeline Intelligence)
     │
     ├─► Tier 2: CEO APPROVES in session
     │
-    ├─► If API can send (Zernio LI/IG post, Arcade X tweet, Composio email):
+    ├─► If API can send (Zernio LI/IG post, twitter_mcp tweet, Composio email):
     │       → Execute native MCP → Update Notion "Sent" ✅
     │
     └─► If API CANNOT (LI DM, X DM, X media, X follow):
@@ -192,6 +191,6 @@ nightly runs.
 
 - ❌ Do NOT `pip install` anything without explicit user approval
 - ❌ NEVER install Python 3.14 — it breaks Termux Hermes
-- ❌ Don't reauthorize Composio/Zernio/Arcade_X unless tokens actually fail
+- ❌ Don't reauthorize Composio/Zernio/twitter_mcp unless tokens actually fail
 - ❌ Don't recreate Notion databases — they're live
 - ❌ Don't switch the LLM provider implicitly

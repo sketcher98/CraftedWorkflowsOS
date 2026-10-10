@@ -90,9 +90,7 @@ Current: $0
 - **Zernio** — LinkedIn + Instagram, connected accounts. Posting and DM
   drafting go through it; sends still require Tier 2 approval
   (`00_System/execution_charter.md`)
-- **Arcade_X** — X/Twitter (39 tools verified: tweet.read, users.read,
-  follows.read, space.read, tweet.write, like.write, retweet.write,
-  list.read, list.write). Account: @PreciousNwosu_
+- **twitter_mcp** — X/Twitter (62 tools verified: tweet.read, users.read, follows.read, space.read, tweet.write, like.write, retweet.write, list.read, list.write, DM.send, DM.read, follow.write, unfollow.write). Account: @PreciousNwosu_. Runs via MCP stdio + direct client; Android UI fallback for DM/media gaps.
 
 ---
 

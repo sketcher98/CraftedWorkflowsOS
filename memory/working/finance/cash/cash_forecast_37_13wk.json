@@ -1,0 +1,285 @@
+{
+  "generated_at": "2026-09-14T08:25:07.717011",
+  "week": 37,
+  "year": 2026,
+  "starting_cash": 0,
+  "total_forecasted_inflows": 14982,
+  "total_forecasted_outflows": 3000,
+  "net_13_week": 11982,
+  "ending_cash_13_week": 11982,
+  "runway_weeks": 0,
+  "runway_status": "CRITICAL",
+  "weekly_projections": [
+    {
+      "week": 1,
+      "week_number": 38,
+      "week_start": "2026-09-14",
+      "week_end": "2026-09-20",
+      "starting_cash": 0,
+      "inflows": 0,
+      "outflows": 300,
+      "net": -300,
+      "ending_cash": -300,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 2,
+      "week_number": 39,
+      "week_start": "2026-09-21",
+      "week_end": "2026-09-27",
+      "starting_cash": -300,
+      "inflows": 0,
+      "outflows": 300,
+      "net": -300,
+      "ending_cash": -600,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 3,
+      "week_number": 40,
+      "week_start": "2026-09-28",
+      "week_end": "2026-10-04",
+      "starting_cash": -600,
+      "inflows": 0,
+      "outflows": 300,
+      "net": -300,
+      "ending_cash": -900,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 4,
+      "week_number": 41,
+      "week_start": "2026-10-05",
+      "week_end": "2026-10-11",
+      "starting_cash": -900,
+      "inflows": 0,
+      "outflows": 300,
+      "net": -300,
+      "ending_cash": -1200,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 5,
+      "week_number": 42,
+      "week_start": "2026-10-12",
+      "week_end": "2026-10-18",
+      "starting_cash": -1200,
+      "inflows": 1497,
+      "outflows": 200,
+      "net": 1297,
+      "ending_cash": 97,
+      "inflow_sources": [
+        "System Jumpstart ($1,497)"
+      ],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 6,
+      "week_number": 43,
+      "week_start": "2026-10-19",
+      "week_end": "2026-10-25",
+      "starting_cash": 97,
+      "inflows": 0,
+      "outflows": 200,
+      "net": -200,
+      "ending_cash": -103,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 7,
+      "week_number": 44,
+      "week_start": "2026-10-26",
+      "week_end": "2026-11-01",
+      "starting_cash": -103,
+      "inflows": 3497,
+      "outflows": 200,
+      "net": 3297,
+      "ending_cash": 3194,
+      "inflow_sources": [
+        "Install Self-Running Revenue ($3,497)"
+      ],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 8,
+      "week_number": 45,
+      "week_start": "2026-11-02",
+      "week_end": "2026-11-08",
+      "starting_cash": 3194,
+      "inflows": 1497,
+      "outflows": 200,
+      "net": 1297,
+      "ending_cash": 4491,
+      "inflow_sources": [
+        "System Jumpstart ($1,497)"
+      ],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 9,
+      "week_number": 46,
+      "week_start": "2026-11-09",
+      "week_end": "2026-11-15",
+      "starting_cash": 4491,
+      "inflows": 0,
+      "outflows": 200,
+      "net": -200,
+      "ending_cash": 4291,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 10,
+      "week_number": 47,
+      "week_start": "2026-11-16",
+      "week_end": "2026-11-22",
+      "starting_cash": 4291,
+      "inflows": 3497,
+      "outflows": 200,
+      "net": 3297,
+      "ending_cash": 7588,
+      "inflow_sources": [
+        "Install Self-Running Revenue ($3,497)"
+      ],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 11,
+      "week_number": 48,
+      "week_start": "2026-11-23",
+      "week_end": "2026-11-29",
+      "starting_cash": 7588,
+      "inflows": 1497,
+      "outflows": 200,
+      "net": 1297,
+      "ending_cash": 8885,
+      "inflow_sources": [
+        "System Jumpstart ($1,497)"
+      ],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 12,
+      "week_number": 49,
+      "week_start": "2026-11-30",
+      "week_end": "2026-12-06",
+      "starting_cash": 8885,
+      "inflows": 0,
+      "outflows": 200,
+      "net": -200,
+      "ending_cash": 8685,
+      "inflow_sources": [],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    },
+    {
+      "week": 13,
+      "week_number": 50,
+      "week_start": "2026-12-07",
+      "week_end": "2026-12-13",
+      "starting_cash": 8685,
+      "inflows": 3497,
+      "outflows": 200,
+      "net": 3297,
+      "ending_cash": 11982,
+      "inflow_sources": [
+        "Install Self-Running Revenue ($3,497)"
+      ],
+      "outflow_categories": [
+        "Operations",
+        "Tools",
+        "Internet"
+      ]
+    }
+  ],
+  "scenarios": {
+    "base": {
+      "description": "Conservative - current outbound pace",
+      "runway_weeks": 0,
+      "ending_cash_13wk": 11982
+    },
+    "upside": {
+      "description": "2 deals/month after week 4",
+      "runway_weeks": 4,
+      "ending_cash_13wk": 21982
+    },
+    "downside": {
+      "description": "No deals until week 8",
+      "runway_weeks": 0,
+      "ending_cash_13wk": 9982
+    },
+    "stress": {
+      "description": "No deals + unexpected $2k expense week 6",
+      "runway_weeks": 0,
+      "ending_cash_13wk": 7982
+    }
+  },
+  "assumptions": {
+    "starting_cash": 0,
+    "sales_cycle_weeks": "4-8 (from Target_Market.md triggers)",
+    "avg_deal_size": "Jumpstart $1,497 / Install $3,497 / Retainer $4,997/mo",
+    "close_rate": "Conservative - pipeline building from zero",
+    "collection_terms": "50% upfront, 50% on delivery (standard for agency)",
+    "operational_burn": "$200-300/week (tools, internet, minimal ops)"
+  },
+  "escalation_triggered": true,
+  "escalation_target": "Finance Director",
+  "data_sources": {
+    "company_state": "02_COO/company_state.md",
+    "pricing": "04_Knowledge/Offers/Pricing_Packages.md",
+    "target_market": "04_Knowledge/Company/Target_Market.md",
+    "working_memory": "working_memory.finance (empty - first run)"
+  }
+}

@@ -370,7 +370,7 @@ def process_approvals(checkpoint: dict):
                 notion_update_page(page_id, {"Status": {"select": {"name": "Queued for Android"}}})
                 telegram_send(f"✅ Queued for Android execution: {pending['name']} via {channel} DM")
             else:
-                # Direct API execution (Zernio for LI/IG posts, Arcade X for tweets, Composio for email)
+                # Direct API execution (Zernio for LI/IG posts, twitter_mcp for tweets, Composio for email)
                 notion_update_page(page_id, {"Status": {"select": {"name": "Sent"}}})
                 telegram_send(f"Approved: {pending['name']} — sending via {channel}")
             

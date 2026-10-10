@@ -123,10 +123,6 @@ def process_queue_item(queue_file: str, config: Dict, limits: Dict) -> Optional[
         opener = pick_spintax(config, "linkedin_dm_openers").replace("{name}", item.get("target", {}).get("name", "there"))
         message = f"{opener}\n\n{message}"
         item["message"] = message
-    elif action == "x_dm" and not any(message.startswith(op.split("{")[0].strip()) for op in config["spintax"]["x_dm_openers"]):
-        opener = pick_spintax(config, "x_dm_openers")
-        message = f"{opener}\n\n{message}"
-        item["message"] = message
 
     with open(queue_file, "w") as f:
         json.dump(item, f, separators=(",", ":"))

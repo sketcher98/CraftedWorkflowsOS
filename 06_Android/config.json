@@ -10,35 +10,35 @@
     "autoinput_installed": true
   },
   "rate_limits": {
-    "linkedin_dm": {
-      "daily_limit": 5,
-      "min_delay_minutes": 15,
-      "max_delay_minutes": 45,
-      "active_hours_start": 8,
-      "active_hours_end": 23
+      "linkedin_dm": {
+        "daily_limit": 5,
+        "min_delay_minutes": 15,
+        "max_delay_minutes": 45,
+        "active_hours_start": 8,
+        "active_hours_end": 23
+      },
+      "linkedin_connect": {
+        "daily_limit": 5,
+        "min_delay_minutes": 15,
+        "max_delay_minutes": 45,
+        "active_hours_start": 8,
+        "active_hours_end": 23
+      },
+      "linkedin_people_search": {
+        "daily_limit": 10,
+        "min_delay_minutes": 10,
+        "max_delay_minutes": 30,
+        "active_hours_start": 8,
+        "active_hours_end": 23
+      },
+      "instagram_dm": {
+        "daily_limit": 5,
+        "min_delay_minutes": 15,
+        "max_delay_minutes": 45,
+        "active_hours_start": 8,
+        "active_hours_end": 23
+      }
     },
-    "x_dm": {
-      "daily_limit": 5,
-      "min_delay_minutes": 10,
-      "max_delay_minutes": 30,
-      "active_hours_start": 8,
-      "active_hours_end": 23
-    },
-    "x_follow": {
-      "daily_limit": 10,
-      "min_delay_minutes": 5,
-      "max_delay_minutes": 20,
-      "active_hours_start": 8,
-      "active_hours_end": 23
-    },
-    "x_media_tweet": {
-      "daily_limit": 10,
-      "min_delay_minutes": 10,
-      "max_delay_minutes": 30,
-      "active_hours_start": 8,
-      "active_hours_end": 23
-    }
-  },
   "spintax": {
     "linkedin_dm_openers": [
       "Hey {name} — quick one.",

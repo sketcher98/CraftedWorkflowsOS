@@ -26,7 +26,7 @@ QUEUE_ITEM_SCHEMA = os.path.join(SCHEMA_DIR, "queue_item.schema.json")
 CANONICAL_GAPS = os.path.join(SCHEMA_DIR, "canonical_gaps.json")
 QUEUE_DIR = os.path.join(os.path.dirname(BASE), "queue")
 
-# Stable ordering for the 7 gaps (memory-as-code: never reorder).
+# Stable ordering for the 4 Android gaps (memory-as-code: never reorder).
 REQUIRED_ROUTING_KEYS = ("gap_index", "provider", "fallback")
 PROVIDERS = {"arcade", "zernio", "composio", "native_android"}
 FALLBACKS = {"autoinput", "adb", "none"}
@@ -60,8 +60,8 @@ def validate_item(item, canonical):
             return _err(f"routing missing '{key}'")
 
     gap_index = routing["gap_index"]
-    if not isinstance(gap_index, int) or not (1 <= gap_index <= 7):
-        return _err(f"gap_index must be int 1-7, got {gap_index!r}")
+    if not isinstance(gap_index, int) or not (1 <= gap_index <= 4):
+        return _err(f"gap_index must be int 1-4, got {gap_index!r}")
 
     # Cross-check gap_index resolves in canonical gaps
     canonical_gap = canonical.get("gaps", {}).get(str(gap_index))
@@ -110,17 +110,17 @@ def validate_file(path, canonical):
 
 def self_test(canonical):
     good = {
-        "routing": {"gap_index": 3, "provider": "native_android", "fallback": "autoinput"},
-        "action": "x_media_tweet",
+        "routing": {"gap_index": 1, "provider": "native_android", "fallback": "autoinput"},
+        "action": "linkedin_dm",
         "lead_id": "lead_001",
-        "message": "Launch post",
-        "target": {"handle": "someuser", "media_urls": ["https://example.com/a.png"]},
+        "message": "Hey — quick question",
+        "target": {"handle": "someuser", "name": "John"},
     }
-    bad_missing_routing = {"action": "x_dm", "message": "hi"}
+    bad_missing_routing = {"action": "linkedin_dm", "message": "hi"}
     bad_gap_index = {"routing": {"gap_index": 99, "provider": "arcade", "fallback": "none"},
-                     "action": "x_dm", "message": "hi"}
+                     "action": "linkedin_dm", "message": "hi"}
     bad_enum = {"routing": {"gap_index": 1, "provider": "aws", "fallback": "none"},
-                "action": "x_dm", "message": "hi"}
+                "action": "linkedin_dm", "message": "hi"}
 
     print("[self-test] expect PASS, FAIL, FAIL, FAIL")
     results = [

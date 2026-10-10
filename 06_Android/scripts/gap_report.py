@@ -58,16 +58,14 @@ def parse_since(s: str) -> datetime:
 
 
 def build_action_to_gap_map(canonical: Dict) -> Dict[str, int]:
-    """Map action names (e.g., 'x_dm') to gap_index using canonical gaps."""
-    # Action names from config.json rate_limits keys and queue items
+    """Map action names (e.g., 'linkedin_dm') to gap_index using canonical gaps."""
+    # Canonical gaps (from schema/canonical_gaps.json): 4 Android-only gaps
+    # X gaps (x_dm, x_media_tweet, x_follow) now handled by twitter_mcp directly
     mapping = {
-        "linkedin_dm": 1,
-        "x_dm": 2,
-        "x_media_tweet": 3,
-        "x_follow": 4,
-        "linkedin_connect": 5,
-        "linkedin_people_search": 6,
-        "instagram_dm": 7,
+        "linkedin_dm": 1,              # Gap 1: LI cold DM
+        "linkedin_connect": 2,         # Gap 2: LI connection request
+        "linkedin_people_search": 3,   # Gap 3: LI people search
+        "instagram_dm": 4,             # Gap 4: IG cold DM
     }
     return mapping
 
@@ -232,7 +230,7 @@ def main():
 
     # Build rows joining agg + canonical + config + rate_limits
     rows = []
-    for gap_index in range(1, 8):
+    for gap_index in range(1, 5):  # Only 4 canonical Android gaps
         if args.gap and gap_index != args.gap:
             continue
 
