@@ -194,3 +194,10 @@ venv/
 *.tgz
 *.rar
 *.7z
+
+# Router test/rebuild directories
+router/
+router-isolated/
+router-probe/
+router-rebuild/
+core
