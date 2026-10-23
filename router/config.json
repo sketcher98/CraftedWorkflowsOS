@@ -1,0 +1,141 @@
+{
+  "host": "127.0.0.1",
+  "port": 8643,
+  "catalog_refresh_seconds": 1800,
+  "retry": {
+    "failure_limit": 2,
+    "cooldown_seconds": 20,
+    "max_cooldown_seconds": 900,
+    "all_failed_wait_seconds": 10,
+    "hard_failed_wait_seconds": 10,
+    "route_timeout_seconds": 120,
+    "stream_idle_timeout_seconds": 180,
+    "first_event_timeout_seconds": 45
+  },
+  "preferences": [
+    {
+      "name": "glm-5.3",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "z-ai/glm-5.3"
+        }
+      ]
+    },
+    {
+      "name": "glm-5.3-free",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "zydit-v4",
+          "model": "glm-5.3-free"
+        }
+      ]
+    },
+    {
+      "name": "glm-5.3-flash",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "z-ai/glm-5.3-flash"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "z-ai/glm-5.3-flash"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "z-ai/glm-5.3-flash"
+        }
+      ]
+    },
+    {
+      "name": "nemotron",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        }
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "name": "nvidia",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "key_env": "NVIDIA_API_KEY",
+      "key_envs": [
+        "NVIDIA_API_KEY",
+        "NVIDIA_API_KEY_2",
+        "NVIDIA_API_KEY_3"
+      ]
+    },
+    {
+      "name": "zydit-v1",
+      "base_url": "https://api.zydit.in/v1",
+      "key_env": "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+      "key_envs": [
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_2",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_3"
+      ]
+    },
+    {
+      "name": "zydit-v2",
+      "base_url": "https://api.zydit.in/v2",
+      "key_env": "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+      "key_envs": [
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_2",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_3"
+      ]
+    },
+    {
+      "name": "zydit-v3",
+      "base_url": "https://api.zydit.in/v3",
+      "key_env": "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+      "key_envs": [
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_2",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_3"
+      ]
+    },
+    {
+      "name": "zydit-v4",
+      "base_url": "https://api.zydit.in/v4",
+      "key_env": "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+      "key_envs": [
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_2",
+        "HERMES_CUSTOM_API_ZYDIT_IN_API_KEY_3"
+      ]
+    },
+    {
+      "name": "mercury",
+      "base_url": "https://api.inceptionlabs.ai/v1",
+      "key_env": "HERMES_CUSTOM_API_INCEPTIONLABS_AI_API_KEY",
+      "key_envs": [
+        "HERMES_CUSTOM_API_INCEPTIONLABS_AI_API_KEY"
+      ]
+    }
+  ]
+}
