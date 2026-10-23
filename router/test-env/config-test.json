@@ -1,0 +1,117 @@
+{
+  "host": "127.0.0.1",
+  "port": 8644,
+  "catalog_refresh_seconds": 21600,
+  "retry": {
+    "failure_limit": 1,
+    "cooldown_seconds": 2,
+    "max_cooldown_seconds": 10,
+    "all_failed_wait_seconds": 1,
+    "route_timeout_seconds": 30,
+    "stream_idle_timeout_seconds": 8,
+    "first_event_timeout_seconds": 5
+  },
+  "preferences": [
+    {
+      "name": "kimi-k3",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "mock-nvidia",
+          "model": "moonshotai/kimi-k3"
+        },
+        {
+          "provider": "mock-zydit-v1",
+          "model": "moonshotai/kimi-k3"
+        },
+        {
+          "provider": "mock-zydit-v2",
+          "model": "moonshotai/kimi-k3"
+        }
+      ]
+    },
+    {
+      "name": "glm-5.3",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "mock-nvidia",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "mock-zydit-v1",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "mock-zydit-v2",
+          "model": "z-ai/glm-5.3"
+        }
+      ]
+    },
+    {
+      "name": "nemotron",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "mock-nvidia",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "mock-zydit-v1",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "mock-zydit-v2",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        }
+      ]
+    },
+    {
+  "name": "deepseek-v4.1-flash",
+  "context_window": 1048576,
+  "routes": [
+    {
+      "provider": "mock-nvidia",
+      "model": "deepseek-ai/deepseek-v4.1-flash"
+    },
+    {
+      "provider": "mock-zydit-v1",
+      "model": "deepseek-ai/deepseek-v4.1-flash"
+    },
+    {
+      "provider": "mock-zydit-v2",
+      "model": "deepseek-ai/deepseek-v4.1-flash"
+    }
+  ]
+}
+  ],
+  "providers": [
+    {
+      "name": "mock-nvidia",
+      "base_url": "http://127.0.0.1:19990",
+      "key_env": "MOCK_KEY_1",
+      "key_envs": [
+        "MOCK_KEY_1",
+        "MOCK_KEY_2"
+      ]
+    },
+    {
+      "name": "mock-zydit-v1",
+      "base_url": "http://127.0.0.1:19991",
+      "key_env": "MOCK_KEY_1",
+      "key_envs": [
+        "MOCK_KEY_1",
+        "MOCK_KEY_2"
+      ]
+    },
+    {
+      "name": "mock-zydit-v2",
+      "base_url": "http://127.0.0.1:19992",
+      "key_env": "MOCK_KEY_1",
+      "key_envs": [
+        "MOCK_KEY_1",
+        "MOCK_KEY_2"
+      ]
+    }
+  ]
+}
