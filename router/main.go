@@ -1598,29 +1598,13 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	preferenceTo := ""
 
 	// LKGP (last-known-good-provider): UNVERIFIED — authored but never tested.
-	// Neutralized 2026-10-23: type error (RouteSpec) plus zero test coverage.
-	// Re-enable only after test-env verification. See go-router-infrastructure.
-	orderedRoutes := preference.Routes
-	_ = orderedRoutes
-	if false {
-		lkgpMu.Lock()
-		lkgpProvider := lkgp[preference.Name]
-		lkgpMu.Unlock()
-
-		if lkgpProvider != "" {
-			orderedRoutes = make([]Route, 0, len(preference.Routes))
-			for _, rt := range preference.Routes {
-				if rt.Provider == lkgpProvider {
-					orderedRoutes = append(orderedRoutes, rt)
-				}
-			}
-			for _, rt := range preference.Routes {
-				if rt.Provider != lkgpProvider {
-					orderedRoutes = append(orderedRoutes, rt)
-				}
-			}
-		}
-	}
+	// Neutralized+removed 2026-10-24 (was: type error RouteSpec, zero test
+	// coverage, and its route-slice hoist caused the preference-fallback
+	// regression). Re-enable only via the test-env orderedPreferenceRoutes
+	// implementation after verification. See go-router-infrastructure.
+	// NOTE: routes MUST be recomputed inside the outer loop — `preference`
+	// advances on preference_fallback; a hoisted slice re-walks the old
+	// preference's routes.
 
 	for {
 		attempted := false
@@ -1628,7 +1612,7 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		fallbackFrom := ""
 		skippedHardFailed := false
 
-		for _, route := range orderedRoutes {
+		for _, route := range preference.Routes {
 			p := providerByName(route.Provider)
 			if p == nil {
 				log.Printf(
