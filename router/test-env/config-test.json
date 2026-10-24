@@ -45,6 +45,18 @@
         {
           "provider": "mock-zydit-v2",
           "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "mock-nvidia",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "mock-zydit-v1",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "mock-zydit-v2",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
         }
       ]
     },
@@ -67,23 +79,23 @@
       ]
     },
     {
-  "name": "deepseek-v4.1-flash",
-  "context_window": 1048576,
-  "routes": [
-    {
-      "provider": "mock-nvidia",
-      "model": "deepseek-ai/deepseek-v4.1-flash"
-    },
-    {
-      "provider": "mock-zydit-v1",
-      "model": "deepseek-ai/deepseek-v4.1-flash"
-    },
-    {
-      "provider": "mock-zydit-v2",
-      "model": "deepseek-ai/deepseek-v4.1-flash"
+      "name": "deepseek-v4.1-flash",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "mock-nvidia",
+          "model": "deepseek-ai/deepseek-v4.1-flash"
+        },
+        {
+          "provider": "mock-zydit-v1",
+          "model": "deepseek-ai/deepseek-v4.1-flash"
+        },
+        {
+          "provider": "mock-zydit-v2",
+          "model": "deepseek-ai/deepseek-v4.1-flash"
+        }
+      ]
     }
-  ]
-}
   ],
   "providers": [
     {
