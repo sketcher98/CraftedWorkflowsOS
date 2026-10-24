@@ -1202,20 +1202,22 @@ const maxNonStreamBytes = 64 << 20
 // timers. Used by the non-streaming path; caller owns resp.Body.
 func readUpstreamBody(resp *http.Response, firstEventTimeout, idleTimeout time.Duration, requestID string) ([]byte, error) {
 	buf := make([]byte, 32*1024)
+	_ = buf // per-read private buffers allocated in the reader goroutine (race fix)
 	full := []byte{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	type readResult struct {
-		n   int
-		err error
+		data []byte // private buffer per read — NEVER reuse across reads (data race)
+		err  error
 	}
 	readCh := make(chan readResult, 1)
 	go func() {
 		for {
-			n, err := resp.Body.Read(buf)
-			readCh <- readResult{n: n, err: err}
+			rbuf := make([]byte, 32*1024)
+			n, err := resp.Body.Read(rbuf)
+			readCh <- readResult{data: rbuf[:n], err: err}
 			if err != nil {
 				return
 			}
@@ -1242,8 +1244,8 @@ func readUpstreamBody(resp *http.Response, firstEventTimeout, idleTimeout time.D
 				default:
 				}
 			}
-			if res.n > 0 {
-				full = append(full, buf[:res.n]...)
+			if len(res.data) > 0 {
+				full = append(full, res.data...)
 				if len(full) > maxNonStreamBytes {
 					return full, fmt.Errorf("non-stream response exceeds %d bytes cap", maxNonStreamBytes)
 				}
@@ -1438,9 +1440,17 @@ func (s *serveStreamState) commit(resp *http.Response) {
 }
 
 // forward writes bytes downstream, committing on first write (deferred commit).
+// Validates that forwarded SSE events are complete (terminator intact) —
+// corruption here means the hold-window sliced an event mid-payload.
 func (s *serveStreamState) forward(b []byte, resp *http.Response) error {
 	if len(b) == 0 {
 		return nil
+	}
+	if ln := len(b); ln >= 2 && (b[ln-1] != '\n' || b[ln-2] != '\n') {
+		if !bytes.HasSuffix(b, []byte("\n\n")) && !bytes.HasSuffix(b, []byte("\r\n\r\n")) && !bytes.HasSuffix(b, []byte("\r\r")) {
+			log.Printf("SSE-CORRUPTION: request %s forwarding %d bytes WITHOUT event terminator: %q...%q",
+				s.requestID, ln, b[:min(40, ln)], b[max(0, ln-40):])
+		}
 	}
 	s.commit(resp)
 	if _, werr := s.w.Write(b); werr != nil {
@@ -1509,20 +1519,19 @@ func pumpSegment(state *serveStreamState, resp *http.Response) (pumpResult, erro
 	res := pumpResult{}
 	requestID := state.requestID
 
-	buf := make([]byte, 32*1024)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	type readResult struct {
-		n   int
-		err error
+		data []byte // private buffer per read — NEVER reuse across reads (data race)
+		err  error
 	}
 	readCh := make(chan readResult, 1)
 	go func() {
 		for {
-			n, err := resp.Body.Read(buf)
-			readCh <- readResult{n: n, err: err}
+			rbuf := make([]byte, 32*1024)
+			n, err := resp.Body.Read(rbuf)
+			readCh <- readResult{data: rbuf[:n], err: err}
 			if err != nil {
 				return
 			}
@@ -1549,15 +1558,18 @@ func pumpSegment(state *serveStreamState, resp *http.Response) (pumpResult, erro
 				default:
 				}
 			}
-			n, err := result.n, result.err
-
-			if n > 0 {
-				res.pending = append(res.pending, buf[:n]...)
+			if len(result.data) > 0 {
+				res.pending = append(res.pending, result.data...)
 				for {
 					ev, consumed := splitSSEEvent(res.pending)
 					if consumed == 0 {
 						break
 					}
+					// COPY the event out of pending's backing array: held events
+					// outlive multiple append generations of res.pending, and any
+					// in-place append reuse of that array corrupts aliased slices
+					// (observed as mid-JSON splices against real NVIDIA SSE).
+					evCopy := append([]byte(nil), ev...)
 					res.pending = res.pending[consumed:]
 					if res.held1 != nil {
 						if ferr := state.forward(res.held1, resp); ferr != nil {
@@ -1565,7 +1577,7 @@ func pumpSegment(state *serveStreamState, resp *http.Response) (pumpResult, erro
 						}
 					}
 					res.held1 = res.held2
-					res.held2 = ev
+					res.held2 = evCopy
 					if payload := ssePayload(ev); payload != nil {
 						if string(payload) == "[DONE]" {
 							res.sawDONE = true
@@ -1591,11 +1603,11 @@ func pumpSegment(state *serveStreamState, resp *http.Response) (pumpResult, erro
 				}
 			}
 
-			if err == io.EOF {
+			if result.err == io.EOF {
 				return res, nil
 			}
-			if err != nil {
-				return res, err
+			if result.err != nil {
+				return res, result.err
 			}
 
 			idleTimer = time.NewTimer(state.idleTimeout)
@@ -1998,19 +2010,22 @@ func tryRoute(
 			}
 
 			routeOutcome = "stream_error"
-			// Post-commitment stream failure: cannot replay downstream, but the
-			// cell IS unhealthy — cool it down so the NEXT request skips it
-			// instead of stalling again for a full idle window.
-			providerFailed(p, route.Model)
-			log.Printf(
-				"provider=%s model=%s stream ended after commitment: %v (cooldown applied)",
-				p.Name,
-				route.Model,
-				err,
-			)
-		}
+					// Post-commitment stream failure: cannot replay downstream, but the
+					// cell IS unhealthy — cool it down so the NEXT request skips it
+					// instead of stalling again for a full idle window.
+					// Return success=false so proxy doesn't exit; retryable=false
+					// so we don't retry the same route. This breaks the inner loop,
+					// then attempted=true triggers preference fallback to next model.
+					providerFailed(p, route.Model)
+					log.Printf(
+						"provider=%s model=%s stream ended after commitment: %v (cooldown applied, will preference-fallback)",
+						p.Name,
+						route.Model,
+						err,
+					)
+				}
 
-		return true, false, err
+				return false, false, err
 	}
 
 	// --- Non-streaming path (FIX-1 + FIX-2b) ---

@@ -151,6 +151,45 @@ func main() {
 		}
 		fmt.Printf("Mock %d: call #%d (model=%s #%d), behavior=%s (resolved=%s)\n", port, n, modelStr, modelCallNum, cfg.Behavior, behavior)
 
+			// Non-streaming requests get a JSON completion response for the
+			// behaviors that exercise the router's non-stream path.
+			streamRequested := false
+			if s, sok := reqBody["stream"].(bool); sok {
+				streamRequested = s
+			}
+			if !streamRequested {
+				switch behavior {
+				case "success":
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"Hello world"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"completion_tokens_details":{"reasoning_tokens":5}}}`)
+					return
+				case "length_truncated":
+					w.Header().Set("Content-Type", "application/json")
+					hasAssistant := false
+					if msgs, mok := reqBody["messages"].([]interface{}); mok {
+						for _, m := range msgs {
+							if mm, mmok := m.(map[string]interface{}); mmok && mm["role"] == "assistant" {
+								hasAssistant = true
+							}
+						}
+					}
+					if hasAssistant {
+						fmt.Fprint(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":" part two"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":9,"completion_tokens_details":{"reasoning_tokens":3}}}`)
+					} else {
+						fmt.Fprint(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"part one"},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":8,"completion_tokens_details":{"reasoning_tokens":2}}}`)
+					}
+					return
+				case "length_mid_toolcall":
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":"}}]},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":15,"completion_tokens_details":{"reasoning_tokens":0}}}`)
+					return
+				case "length_cap_hit":
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"chunk"},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"completion_tokens_details":{"reasoning_tokens":1}}}`)
+					return
+				}
+			}
+
 			switch behavior {
 		case "timeout":
 			fmt.Printf("Mock %d: sleeping %d ms\n", port, cfg.Delay)
@@ -331,6 +370,73 @@ func main() {
 			}
 			fallthrough
 
+		case "length_truncated":
+			// First call: content delta then finish_reason=length.
+			// Continuation call (assistant message present in messages): finish with stop.
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+				return
+			}
+			hasAssistant := false
+			if msgs, mok := reqBody["messages"].([]interface{}); mok {
+				for _, m := range msgs {
+					if mm, mmok := m.(map[string]interface{}); mmok && mm["role"] == "assistant" {
+						hasAssistant = true
+					}
+				}
+			}
+			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"part one\"}}]}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			if hasAssistant {
+				fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\" part two\"}},{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":9,\"completion_tokens_details\":{\"reasoning_tokens\":3}}}\n\n")
+			} else {
+				fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":8,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\n\n")
+			}
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+
+		case "length_mid_toolcall":
+			// Truncation mid-tool-call: router must NEVER stitch this — passthrough.
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\"}}]}}]}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":15,\"completion_tokens_details\":{\"reasoning_tokens\":0}}}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+
+		case "length_cap_hit":
+			// Always finish_reason=length, even on continuations: router must hit its cap.
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"chunk\"}}]}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"completion_tokens_details\":{\"reasoning_tokens\":1}}}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+
 		case "success":
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
@@ -346,6 +452,10 @@ func main() {
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
 			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			// Terminal chunk with finish_reason + usage (exercises router truncation telemetry)
+			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"completion_tokens_details\":{\"reasoning_tokens\":5}}}\n\n")
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
 			fmt.Fprintf(w, "data: [DONE]\n\n")
