@@ -2228,19 +2228,22 @@ func tryRoute(
 			}
 
 			routeOutcome = "stream_error"
-			// Post-commitment stream failure: cannot replay downstream, but the
-			// cell IS unhealthy — cool it down so the NEXT request skips it
-			// instead of stalling again for a full idle window.
-			providerFailed(p, route.Model)
-			log.Printf(
-				"provider=%s model=%s stream ended after commitment: %v (cooldown applied)",
-				p.Name,
-				route.Model,
-				err,
-			)
-		}
+					// Post-commitment stream failure: cannot replay downstream, but the
+					// cell IS unhealthy — cool it down so the NEXT request skips it
+					// instead of stalling again for a full idle window.
+					// Return success=false so proxy doesn't exit; retryable=false
+					// so we don't retry the same route. This breaks the inner loop,
+					// then attempted=true triggers preference fallback to next model.
+					providerFailed(p, route.Model)
+					log.Printf(
+						"provider=%s model=%s stream ended after commitment: %v (cooldown applied, will preference-fallback)",
+						p.Name,
+						route.Model,
+						err,
+					)
+				}
 
-		return true, false, err
+				return false, false, err
 	}
 
 	// --- Non-streaming path (FIX-1 + FIX-2b) ---
