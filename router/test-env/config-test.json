@@ -9,7 +9,9 @@
     "all_failed_wait_seconds": 1,
     "route_timeout_seconds": 30,
     "stream_idle_timeout_seconds": 8,
-    "first_event_timeout_seconds": 5
+    "first_event_timeout_seconds": 5,
+    "preflight_buffer_events": 3,
+    "preflight_buffer_seconds": 5
   },
   "preferences": [
     {

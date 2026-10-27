@@ -11,7 +11,8 @@
     "route_timeout_seconds": 10,
     "stream_idle_timeout_seconds": 30,
     "first_event_timeout_seconds": 10,
-    "continuation_max": 3
+    "continuation_max": 3,
+    "max_hold_seconds": 30
   },
   "preferences": [
     {
