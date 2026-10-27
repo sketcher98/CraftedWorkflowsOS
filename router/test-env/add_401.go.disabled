@@ -1,0 +1,14 @@
+package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+	fmt.Println("401 mock: 19997")
+	http.ListenAndServe("127.0.0.1:19997", nil)
+}

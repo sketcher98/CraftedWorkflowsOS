@@ -1,0 +1,31 @@
+{
+  "host": "127.0.0.1",
+  "port": 8644,
+  "catalog_refresh_seconds": 3600,
+  "retry": {
+    "failure_limit": 1,
+    "cooldown_seconds": 1,
+    "max_cooldown_seconds": 5,
+    "all_failed_wait_seconds": 1,
+    "route_timeout_seconds": 10
+  },
+  "preferences": [
+    {
+      "name": "nemotron",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "mock-nvidia",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        }
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "name": "mock-nvidia",
+      "base_url": "http://127.0.0.1:19990",
+      "key_env": "MOCK_KEY_1"
+    }
+  ]
+}
