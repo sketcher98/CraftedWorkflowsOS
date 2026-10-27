@@ -208,6 +208,8 @@ router/config.json.*
 router/config.*.json
 router/test-env/mock*
 router/test-env/test-router*
+router/test-env/router*
+router/test-env/multikey_*_mock*
 router/test-env/*.log*
 router/test-env/*.jsonl
 router-isolated/
