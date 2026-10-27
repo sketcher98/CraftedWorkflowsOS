@@ -795,6 +795,15 @@ func holdAndServe(w http.ResponseWriter, r *http.Request) bool {
 				continue // all hard-failed: probe loop owns recovery; keep holding
 			}
 			if wait <= 0 {
+				// No route is cooling — but if no route could be ATTEMPTED either
+				// (every route skipped as catalog-absent / unknown model), there is
+				// nothing to wait for. Re-walking would spin forever at 1Hz and
+				// never answer the client. Emit the legacy 503 instead.
+				if nextAttemptablePreference() == nil {
+					log.Printf("hold-and-serve: no attemptable route (all skipped); emitting 503")
+					waitForRecovery(w, r)
+					return false
+				}
 				log.Printf("hold-and-serve: cooldown expired, re-walking routes")
 				return true
 			}
@@ -1820,11 +1829,60 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		// then re-walk every preference from the top. Only emit the
 		// legacy 503 if the hold window itself is exceeded.
 		if holdAndServe(w, r) {
-			preference = firstPreference()
+			// Restart the walk at the first preference that can actually be
+			// attempted now. Blindly using firstPreference() can land on a
+			// preference whose models no provider serves (catalog=absent),
+			// which skips every route, never advances the chain, and spins
+			// the hold at 1Hz until the client times out.
+			next := nextAttemptablePreference()
+			if next == nil {
+				log.Printf("no attemptable preference after hold; emitting 503")
+				waitForRecovery(w, r)
+				return
+			}
+			preference = next
 			continue
 		}
 		return
 	}
+}
+
+// nextAttemptablePreference returns the first preference (in configured order)
+// that has at least one route that could be tried right now: provider exists,
+// model is not hard-failed, model is present in the provider catalog, and the
+// route is not currently cooling. Returns nil when nothing is attemptable.
+func nextAttemptablePreference() *Preference {
+	cfgMu.RLock()
+	prefs := make([]Preference, len(cfg.Preferences))
+	copy(prefs, cfg.Preferences)
+	providers := append([]*Provider(nil), cfg.Providers...)
+	cfgMu.RUnlock()
+
+	byName := make(map[string]*Provider, len(providers))
+	for _, p := range providers {
+		byName[p.Name] = p
+	}
+
+	for i := range prefs {
+		for _, route := range prefs[i].Routes {
+			p := byName[route.Provider]
+			if p == nil {
+				continue
+			}
+			p.mu.Lock()
+			h := p.routes[route.Model]
+			hardFailed := h != nil && h.HardFailed
+			cooling := h != nil && !h.CooldownTil.IsZero() && time.Until(h.CooldownTil) > 0
+			inCatalog := len(p.catalog) == 0 || p.catalog[route.Model]
+			p.mu.Unlock()
+
+			if hardFailed || cooling || !inCatalog {
+				continue
+			}
+			return &prefs[i]
+		}
+	}
+	return nil
 }
 
 func firstPreference() *Preference {
