@@ -1,0 +1,529 @@
+"""
+Diagnostics Screen for RouteOps Curses TUI - 4 tabs with drill-down.
+"""
+
+import curses
+from typing import List, Dict
+from datetime import datetime
+
+from routeops.state import AppState
+from routeops.models.provider import ProviderHealth
+
+
+class DiagnosticsScreen:
+    """Diagnostics screen with 5 tabs: Connectivity, Latency, Errors, Binary, Dangling Models."""
+
+    def __init__(self, app_state: AppState):
+        self.app_state = app_state
+        self.current_tab = 0  # 0=connectivity, 1=latency, 2=errors, 3=binary, 4=dangling
+        self.tab_names = ["Connectivity", "Latency", "Errors", "Binary", "Dangling Models"]
+        self.scroll_offset = 0
+        self._dangling_cache = None
+        self._dangling_checked_at = None
+
+    def set_size(self, width: int, height: int) -> None:
+        self.width = max(60, width)
+        self.height = max(15, height)
+
+    def handle_key(self, key: int) -> bool:
+        """Handle key press. Returns True if handled."""
+        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5')):
+            self.current_tab = int(chr(key)) - 1
+            self.scroll_offset = 0
+            if self.current_tab == 4:
+                self._dangling_cache = None  # force rescan on tab entry
+            return True
+
+        if key in (curses.KEY_LEFT, ord('h')):
+            self.current_tab = max(0, self.current_tab - 1)
+            self.scroll_offset = 0
+            if self.current_tab == 4:
+                self._dangling_cache = None
+            return True
+
+        if key in (curses.KEY_RIGHT, ord('l')):
+            self.current_tab = min(4, self.current_tab + 1)
+            self.scroll_offset = 0
+            if self.current_tab == 4:
+                self._dangling_cache = None
+            return True
+
+        if key in (curses.KEY_UP, ord('k')):
+            self.scroll_offset = max(0, self.scroll_offset - 1)
+            return True
+
+        if key in (curses.KEY_DOWN, ord('j')):
+            self.scroll_offset += 1
+            return True
+
+        if key in (27, ord('q')):  # Esc, q
+            return False  # Let parent handle
+
+        return False
+
+    def render(self, term) -> None:
+        """Render diagnostics screen."""
+        rows, cols = term.size.rows, term.size.cols
+        y = 0
+
+        # Tab bar — active tab highlighted
+        tab_str = "DIAGNOSTICS  "
+        term.write(y, 0, tab_str, curses.A_BOLD | curses.color_pair(1))
+        tx = len(tab_str)
+        for i, name in enumerate(self.tab_names):
+            marker = f"[{name}]" if i == self.current_tab else f" {name} "
+            attr = (curses.color_pair(2) | curses.A_BOLD if i == self.current_tab
+                    else curses.A_DIM)
+            if tx + len(marker) > cols - 22:
+                break
+            term.write(y, tx, marker, attr)
+            tx += len(marker) + 1
+        hint = "[1-5=tabs]  [h/Esc=back]"
+        term.write(y, cols - len(hint) - 1, hint, curses.color_pair(5) | curses.A_DIM)
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+
+        # Render current tab
+        if self.current_tab == 0:
+            lines = self._build_connectivity_lines(cols - 4)
+        elif self.current_tab == 1:
+            lines = self._build_latency_lines(cols - 4)
+        elif self.current_tab == 2:
+            lines = self._build_errors_lines(cols - 4)
+        elif self.current_tab == 4:
+            lines = self._build_dangling_lines(cols - 4)
+        else:
+            lines = self._build_binary_lines(cols - 4)
+
+        # Apply scroll — with per-line coloring: ✗/⚠/HARD/COOLDOWN red-yellow,
+        # ● ALL CLEAR green, section headings bold
+        visible_rows = rows - y - 2
+        for i in range(self.scroll_offset, min(self.scroll_offset + visible_rows, len(lines))):
+            raw = lines[i]
+            line = raw.ljust(cols - 6)[:cols - 6]
+            stripped = raw.lstrip()
+            if stripped.startswith(("✗", "⚠")) or "HARD-FAILED" in raw:
+                attr = curses.color_pair(4) | curses.A_BOLD
+            elif "ALL CLEAR" in raw:
+                attr = curses.color_pair(2) | curses.A_BOLD
+            elif stripped.startswith("○"):
+                attr = curses.color_pair(3)
+            elif stripped.startswith(("REACHABLE", "●")):
+                attr = curses.color_pair(2)
+            elif raw.endswith("─") or raw.isupper():
+                attr = curses.A_BOLD | curses.color_pair(5)
+            else:
+                attr = curses.A_NORMAL
+            term.write(y, 2, f"│ {line} │", attr)
+            y += 1
+
+        # Scroll indicator
+        if len(lines) > visible_rows:
+            indicator = f"  ↑↓ {self.scroll_offset + 1}-{min(self.scroll_offset + visible_rows, len(lines))} of {len(lines)}"
+            term.write(y, 0, indicator[:cols], curses.color_pair(5))
+
+    # ------------------------------------------------- dangling models
+
+    _HERMES_CONFIG_REFS = [
+        # (yaml path regex-ish keys, label)
+        (r"^model:\n  default: (\S+)", "model.default"),
+    ]
+
+    def _scan_hermes_model_refs(self) -> Dict[str, List[str]]:
+        """Collect every model reference in hermes main + profile configs.
+        Returns {model_id: [source labels]}. Read-only."""
+        import re as _re
+        from pathlib import Path as _Path
+        home = _Path.home()
+        files = [home / ".hermes" / "config.yaml"]
+        files += sorted((home / ".hermes" / "profiles").glob("*/config.yaml"))
+        refs: Dict[str, List[str]] = {}
+        for f in files:
+            if not f.exists() or ".bak" in f.name:
+                continue
+            label_base = "main" if f.parent.name == ".hermes" else f.parent.name
+            try:
+                text = f.read_text()
+            except Exception:
+                continue
+            # section-aware scan: model refs inside custom_providers (provider
+            # definitions, not requests) and image_gen (different API surface,
+            # never in chat catalogs) are not dangling candidates
+            section = ""
+            for ln in text.splitlines():
+                sec = _re.match(r"^([a-z_]+):\s*$", ln)
+                if sec:
+                    section = sec.group(1)
+                    continue
+                m = _re.match(r"^\s+model:\s*'?([\w/.-]+)'?\s*$", ln)
+                if m:
+                    mid = m.group(1)
+                    if section in ("custom_providers", "image_gen"):
+                        continue
+                    if mid and ("-" in mid or "/" in mid) and "http" not in mid:
+                        refs.setdefault(mid, []).append(f"{label_base}:model_ref")
+            # default model (first 30 lines cover the model: block)
+            m = _re.search(r"^model:\n  default: (\S+)", text, _re.M)
+            if m:
+                refs.setdefault(m.group(1), []).append(f"{label_base}:model.default")
+            # reasoning_overrides keys
+            for rm in _re.finditer(r"^\s{4}([\w/.-]+):\s*(?:high|medium|low)\s*$",
+                                   text, _re.M):
+                if "/" in rm.group(1) or rm.group(1).startswith("moonshot"):
+                    refs.setdefault(rm.group(1), []).append(
+                        f"{label_base}:reasoning_override")
+            # auxiliary model refs are already collected by the section-aware
+            # scan above (which excludes custom_providers + image_gen)
+        return refs
+
+    def _build_dangling_lines(self, width: int) -> List[str]:
+        """Dangling Models tab: hermes refs vs live router catalogs."""
+        from datetime import datetime as _dt
+        lines = []
+        w = width - 4
+        lines.append("DANGLING MODEL SCAN — hermes config refs vs live catalogs")
+        lines.append("─" * w)
+        lines.append("")
+        # cache for 5 min to avoid hammering on every redraw
+        now = _dt.now()
+        if (self._dangling_cache is None
+                or self._dangling_checked_at is None
+                or (now - self._dangling_checked_at).total_seconds() > 300):
+            self._dangling_cache = self._run_dangling_scan()
+            self._dangling_checked_at = now
+        result = self._dangling_cache
+        checked = self._dangling_checked_at.strftime("%H:%M:%S")
+        lines.append(f"  scanned {checked} · {result['n_refs']} refs · "
+                     f"{result['n_models']} unique models")
+        lines.append("")
+        if not result["dangling"]:
+            lines.append("  ● ALL CLEAR — every referenced model exists in a live catalog")
+            return lines
+        lines.append(f"  ⚠ {len(result['dangling'])} DANGLING MODEL(S):")
+        lines.append("")
+        for mid, sources, status in result["dangling"]:
+            lines.append(f"  ✗ {mid}")
+            lines.append(f"      status: {status}")
+            for s in sources[:4]:
+                lines.append(f"      ref:    {s}")
+            lines.append("")
+        if result["unverifiable"]:
+            lines.append(f"  ○ {len(result['unverifiable'])} unverifiable "
+                         "(provider catalog empty — models:0):")
+            for mid, sources in result["unverifiable"][:5]:
+                lines.append(f"    ? {mid}  ({sources[0]})")
+        return lines
+
+    def _run_dangling_scan(self) -> Dict:
+        """Full scan: gather refs, probe catalogs, classify."""
+        from routeops.adapters.config_editor import ConfigEditor
+        refs = self._scan_hermes_model_refs()
+        ce = ConfigEditor()
+        cfg = ce.load()
+        # union of live catalogs (probe) — but also include router preferences
+        # as valid targets (they're routable by definition)
+        live: Dict[str, List[str]] = {}
+        probe_issues = []
+        for prov in cfg.get("providers", []):
+            r = ce.probe_catalog(prov["base_url"], prov.get("key_env", ""),
+                                 timeout=12)
+            if r.get("ok"):
+                for m in r["models"]:
+                    live.setdefault(m, []).append(prov["name"])
+            else:
+                probe_issues.append(f"{prov['name']}: {r.get('error','')[:40]}")
+        pref_models = {p["name"] for p in cfg.get("preferences", [])}
+        for pr in cfg.get("preferences", []):
+            for rt in pr.get("routes", []):
+                pref_models.add(rt["model"])
+        dangling = []
+        unverifiable = []
+        empty_catalogs = all(not v for v in live.values())
+        for mid, sources in sorted(refs.items()):
+            if mid in live:
+                continue
+            if mid in pref_models:
+                continue
+            if empty_catalogs:
+                unverifiable.append((mid, sources))
+                continue
+            # probe the model directly for a definitive status
+            status = "not found in any provider catalog"
+            for prov in cfg.get("providers", []):
+                r = ce.test_key(prov["base_url"], prov.get("key_env", ""), mid,
+                                timeout=20)
+                if r.get("ok"):
+                    status = f"actually live on {prov['name']} (catalog lag)"
+                    break
+                if "410" in r.get("detail", ""):
+                    status = "410 Gone — model reached end of life"
+                    break
+            dangling.append((mid, sources, status))
+        return {"n_refs": sum(len(v) for v in refs.values()),
+                "n_models": len(refs),
+                "dangling": dangling,
+                "unverifiable": unverifiable,
+                "probe_issues": probe_issues}
+
+    def _build_connectivity_lines(self, width: int) -> List[str]:
+        lines = []
+        w = width - 4
+        
+        lines.append("CONNECTIVITY CHECKS")
+        lines.append("─" * w)
+        lines.append("")
+
+        # Check /health endpoint
+        health_ok = len(self.app_state.providers) > 0 and any(p.health for p in self.app_state.providers.values())
+        lines.append(f"  /health endpoint:     {'● REACHABLE' if health_ok else '● UNREACHABLE'}")
+
+        # Check /v1/models endpoint
+        models_ok = len(self.app_state._models_cache) > 0
+        lines.append(f"  /v1/models endpoint:  {'● REACHABLE' if models_ok else '● UNREACHABLE'}")
+
+        # Check config.json
+        config_ok = self.app_state.config is not None
+        lines.append(f"  config.json:          {'● READABLE' if config_ok else '● UNREADABLE'}")
+
+        # Check JSONL
+        jsonl_ok = len(self.app_state.recent_events) > 0
+        lines.append(f"  router-events.jsonl:  {'● READABLE' if jsonl_ok else '● UNREADABLE'}")
+
+        # Check process
+        proc = self.app_state.process_info
+        proc_ok = proc and proc.identity == "PRODUCTION"
+        lines.append(f"  router process:       {'● RUNNING' if proc_ok else '● NOT FOUND'}")
+        if proc:
+            lines.append(f"    PID: {proc.pid}")
+            lines.append(f"    Identity: {proc.identity}")
+            lines.append(f"    Binary: {proc.exe}")
+            lines.append(f"    CWD: {proc.cwd}")
+            if proc.uptime_seconds:
+                hours = proc.uptime_seconds // 3600
+                mins = (proc.uptime_seconds % 3600) // 60
+                lines.append(f"    Uptime: {hours}h {mins}m")
+
+        lines.append("")
+        lines.append("ROUTER HEALTH ENDPOINT RESPONSE")
+        lines.append("─" * w)
+        lines.append("")
+
+        # Show provider health from /health
+        for name, pm in self.app_state.providers.items():
+            health = pm.health
+            status = "HEALTHY" if health.healthy else "DEGRADED"
+            if health.hard_failed:
+                status = "HARD-FAILED"
+            lines.append(f"  {name:<12}: {status}  (failures={health.failures}, models={health.catalog_models})")
+
+        return [line[:w] for line in lines]
+
+    def _build_latency_lines(self, width: int) -> List[str]:
+        """Build latency drill-down lines."""
+        lines = []
+        w = width - 4
+
+        lines.append("LATENCY DRILL-DOWN (from JSONL route_result events)")
+        lines.append("─" * w)
+        lines.append("")
+
+        # Collect latency data from events
+        latencies = []
+        for event in self.app_state.recent_events:
+            if event.event_type == "route_result" and event.latency_ms:
+                latencies.append({
+                    'provider': event.provider,
+                    'model': event.model,
+                    'latency_ms': event.latency_ms,
+                    'status': event.status,
+                    'timestamp': event.timestamp
+                })
+
+        if not latencies:
+            lines.append("  No latency data available")
+            return [line[:w] for line in lines]
+
+        # Overall stats
+        all_lat = [l['latency_ms'] for l in latencies]
+        all_lat.sort()
+        n = len(all_lat)
+        
+        def percentile(arr, p):
+            if not arr:
+                return 0
+            idx = int(len(arr) * p / 100)
+            return arr[min(idx, len(arr) - 1)]
+        
+        lines.append(f"  Total requests: {n}")
+        lines.append(f"  Min: {min(all_lat)}ms")
+        lines.append(f"  P50: {percentile(all_lat, 50)}ms")
+        lines.append(f"  P90: {percentile(all_lat, 90)}ms")
+        lines.append(f"  P99: {percentile(all_lat, 99)}ms")
+        lines.append(f"  Max: {max(all_lat)}ms")
+        lines.append("")
+
+        # Per-provider breakdown
+        from collections import defaultdict
+        by_provider = defaultdict(list)
+        for l in latencies:
+            by_provider[l['provider']].append(l['latency_ms'])
+        
+        lines.append("PER-PROVIDER LATENCY")
+        lines.append("─" * w)
+        lines.append("")
+        
+        for provider, lats in sorted(by_provider.items()):
+            lats.sort()
+            lines.append(f"  {provider}:")
+            lines.append(f"    Count: {len(lats)}  Min: {min(lats)}ms  P50: {percentile(lats, 50)}ms  P90: {percentile(lats, 90)}ms  Max: {max(lats)}ms")
+
+        return [line[:w] for line in lines]
+
+    def _build_errors_lines(self, width: int) -> List[str]:
+        """Build error analysis lines."""
+        lines = []
+        w = width - 4
+
+        lines.append("ERROR ANALYSIS (from JSONL events)")
+        lines.append("─" * w)
+        lines.append("")
+
+        # Count errors by type
+        errors = []
+        fallback_events = []
+        cooldown_events = []
+        
+        for event in self.app_state.recent_events:
+            if event.event_type == "route_result" and event.error:
+                errors.append({
+                    'provider': event.provider,
+                    'model': event.model,
+                    'error': event.error,
+                    'status': event.status,
+                    'timestamp': event.timestamp
+                })
+            elif event.event_type == "route_fallback":
+                fallback_events.append({
+                    'provider': event.provider,
+                    'from_pref': event.from_preference,
+                    'to_pref': event.to_preference,
+                    'timestamp': event.timestamp
+                })
+            elif event.event_type == "route_cooldown":
+                cooldown_events.append({
+                    'provider': event.provider,
+                    'cooldown': event.cooldown_seconds,
+                    'timestamp': event.timestamp
+                })
+
+        lines.append(f"Total errors: {len(errors)}")
+        lines.append(f"Total fallbacks: {len(fallback_events)}")
+        lines.append(f"Total cooldowns: {len(cooldown_events)}")
+        lines.append("")
+
+        # Top errors
+        if errors:
+            from collections import Counter
+            error_counts = Counter(e['error'] for e in errors)
+            lines.append("TOP ERRORS")
+            lines.append("─" * w)
+            lines.append("")
+            for error_msg, count in error_counts.most_common(5):
+                lines.append(f"  [{count}x] {error_msg[:w-10]}")
+            lines.append("")
+
+        # Recent fallbacks
+        if fallback_events:
+            lines.append("RECENT FALLBACKS")
+            lines.append("─" * w)
+            lines.append("")
+            for fb in fallback_events[-5:]:
+                ts = fb['timestamp'].strftime("%H:%M:%S") if fb['timestamp'] else "--:--:--"
+                lines.append(f"  {ts}  {fb['from_pref'] or '?'} → {fb['to_pref'] or '?'}  via {fb['provider']}")
+
+        # Recent cooldowns
+        if cooldown_events:
+            lines.append("")
+            lines.append("RECENT COOLDOWNS")
+            lines.append("─" * w)
+            lines.append("")
+            for cd in cooldown_events[-5:]:
+                ts = cd['timestamp'].strftime("%H:%M:%S") if cd['timestamp'] else "--:--:--"
+                lines.append(f"  {ts}  {cd['provider']}  {cd['cooldown']}s")
+
+        return [line[:w] for line in lines]
+
+    def _build_binary_lines(self, width: int) -> List[str]:
+        """Build binary verification lines."""
+        lines = []
+        w = width - 4
+
+        lines.append("BINARY VERIFICATION")
+        lines.append("─" * w)
+        lines.append("")
+
+        proc = self.app_state.process_info
+        
+        if not proc:
+            lines.append("  No router process found")
+            return [line[:w] for line in lines]
+
+        lines.append(f"PID: {proc.pid}")
+        lines.append(f"Identity: {proc.identity}")
+        lines.append(f"Executable: {proc.exe}")
+        lines.append(f"Working Dir: {proc.cwd}")
+        
+        if proc.uptime_seconds:
+            hours = proc.uptime_seconds // 3600
+            mins = (proc.uptime_seconds % 3600) // 60
+            lines.append(f"Uptime: {hours}h {mins}m")
+
+        lines.append("")
+        lines.append("SIZE CHECK")
+        lines.append("─" * w)
+        lines.append("")
+
+        if proc.binary_size:
+            size_mb = proc.binary_size / (1024 * 1024)
+            expected = "~10MB (production)"
+            if proc.binary_size >= 8_000_000:
+                lines.append(f"  Binary size: {size_mb:.1f}MB  ✓ MATCHES {expected}")
+            else:
+                lines.append(f"  Binary size: {size_mb:.1f}MB  ✗ BELOW {expected}")
+        else:
+            lines.append("  Binary size: UNKNOWN")
+
+        lines.append("")
+        lines.append("PATH VERIFICATION")
+        lines.append("─" * w)
+        lines.append("")
+
+        expected_exe = "/data/data/com.termux/files/home/CraftedWorkflowsOS/router/router"
+        expected_cwd = "/data/data/com.termux/files/home/CraftedWorkflowsOS/router"
+
+        exe_match = proc.exe == expected_exe
+        cwd_match = proc.cwd == expected_cwd
+
+        lines.append(f"  Exe path:  {'✓' if exe_match else '✗'} {proc.exe}")
+        if not exe_match:
+            lines.append(f"    Expected: {expected_exe}")
+        
+        lines.append(f"  CWD:       {'✓' if cwd_match else '✗'} {proc.cwd}")
+        if not cwd_match:
+            lines.append(f"    Expected: {expected_cwd}")
+
+        if exe_match and cwd_match and proc.binary_size >= 8_000_000:
+            lines.append("")
+            lines.append("  RESULT: PRODUCTION ROUTER VERIFIED ✓")
+        elif exe_match and not cwd_match:
+            lines.append("")
+            lines.append("  RESULT: TEST ROUTER (same binary, different CWD)")
+        elif not exe_match and "router" in proc.exe.lower():
+            lines.append("")
+            lines.append("  RESULT: WRONG ROUTER BINARY")
+        else:
+            lines.append("")
+            lines.append("  RESULT: NOT RUNNING")
+
+        return [line[:w] for line in lines]

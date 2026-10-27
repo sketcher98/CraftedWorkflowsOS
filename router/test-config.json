@@ -1,0 +1,22 @@
+{
+  "host": "127.0.0.1",
+  "port": 8643,
+  "timeout_seconds": 30,
+  "max_retries": 2,
+  "failure_limit": 3,
+  "cooldown_seconds": 60,
+  "providers": [
+    {
+      "name": "bad-provider",
+      "base_url": "http://127.0.0.1:19991/bad",
+      "api_key": "",
+      "model": ""
+    },
+    {
+      "name": "good-provider",
+      "base_url": "http://127.0.0.1:19991/good",
+      "api_key": "",
+      "model": ""
+    }
+  ]
+}

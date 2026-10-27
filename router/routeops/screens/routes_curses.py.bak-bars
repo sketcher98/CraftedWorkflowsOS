@@ -1,0 +1,708 @@
+"""
+Routes Screen for RouteOps Curses TUI - Preference tabs with horizontal scroll.
+"""
+
+import curses
+from typing import List, Dict, Tuple, Optional
+
+from routeops.state import AppState
+from routeops.models.provider import ProviderHealth
+from routeops.screens.route_editor import RouteEditor
+
+
+class RoutesScreen:
+    """Routes screen showing preference tabs with provider×model matrix."""
+
+    def __init__(self, app_state: AppState):
+        self.app_state = app_state
+        self.current_pref_index = 0
+        self.horizontal_scroll = 0
+        self.max_visible_providers = 10
+        self.editor = RouteEditor(app_state)
+
+    def set_size(self, width: int, height: int) -> None:
+        self.width = max(60, width)
+        self.height = max(15, height)
+
+    def handle_key(self, key: int) -> bool:
+        """Handle key press. Returns True if handled."""
+        # --- editor overlay takes priority when open ---
+        if self.editor.mode != "closed":
+            return self._handle_editor_key(key)
+
+        prefs = list(self.app_state.config.preferences) if self.app_state.config else []
+        num_prefs = len(prefs)
+
+        if key == curses.KEY_LEFT:
+            self.horizontal_scroll = max(0, self.horizontal_scroll - 1)
+            return True
+
+        if key == curses.KEY_RIGHT:
+            # Max scroll depends on number of providers
+            num_providers = len(self.app_state.providers) if self.app_state.providers else 0
+            max_scroll = max(0, num_providers - self.max_visible_providers)
+            self.horizontal_scroll = min(max_scroll, self.horizontal_scroll + 1)
+            return True
+
+        if key == ord('	'):  # Tab
+            if num_prefs > 0:
+                self.current_pref_index = (self.current_pref_index + 1) % num_prefs
+                self.horizontal_scroll = 0
+            return True
+
+        if key in (27, ord('h'), ord('q')):  # Esc, h, q
+            return False  # Let parent handle
+
+        # --- Phase 1B editor keys ---
+        if key == ord('e'):
+            self.editor.open_edit(self.current_pref_index)
+            return True
+        if key == ord('a'):
+            self.editor.open_add()
+            return True
+        if key == ord('d'):
+            self.editor.stage_delete(self.current_pref_index)
+            return True
+        if key == ord('o'):
+            self.editor.open_prov_mgmt()
+            return True
+        if key == ord('x'):
+            self.editor.test_current_route(
+                self.current_pref_index, self.editor.route_idx)
+            return True
+
+        return False
+
+    # ------------------------------------------------------- editor keys
+
+    def _handle_editor_key(self, key: int) -> bool:
+        ed = self.editor
+        if ed.mode == "key_mgmt":
+            if key in (curses.KEY_UP, ord('k')):
+                ed.km_idx = max(0, ed.km_idx - 1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                cfg = ed.ed.load()
+                keys, _ = ed._keys_of(cfg, ed.km_prov)
+                ed.km_idx = min(len(keys) - 1, ed.km_idx + 1)
+                return True
+            if key == ord('t'):
+                ed.km_test(all_keys=False)
+                return True
+            if key == ord('T'):
+                ed.km_test(all_keys=True)
+                return True
+            if key == ord('a'):
+                ed.km_input = ""
+                ed.mode = "km_add"
+                return True
+            if key == ord('d'):
+                ed.km_stage_delete()
+                return True
+            if key == 27:  # Esc -> model browser for same provider
+                ed.open_model_browser(ed.km_prov)
+                return True
+            return True
+        if ed.mode == "km_add":
+            if key in (10, 13, curses.KEY_ENTER):
+                ed.km_stage_add(ed.km_input)
+                return True
+            if key in (8, 127, curses.KEY_BACKSPACE):
+                ed.km_input = ed.km_input[:-1]
+                return True
+            if 32 <= key <= 126:
+                ed.km_input += chr(key)
+                return True
+            if key == 27:
+                ed.open_key_mgmt(ed.km_prov)
+                return True
+            return True
+        if ed.mode == "model_browser":
+            if key in (curses.KEY_UP, ord('k')):
+                ed.mb_idx = max(0, ed.mb_idx - 1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                ed.mb_idx = min(len(ed.mb_models) - 1, ed.mb_idx + 1)
+                return True
+            if key == ord('t'):
+                ed.mb_test_model()
+                return True
+            if key == ord('a'):
+                ed.mb_stage_pref()
+                return True
+            if key == ord('c'):
+                ed.mb_to_bench()
+                return True
+            if key == 27:
+                ed.mode = "closed"
+                return True
+            return True
+        if ed.mode == "test_bench":
+            if key == ord('r'):
+                ed.bench_run()
+                return True
+            if key == ord('x'):
+                ed.bench_clear()
+                return True
+            if key == 27:
+                ed.mode = "closed"
+                return True
+            return True
+        if ed.mode == "edit":
+            if key == ord('e'):
+                ed.toggle_route()
+                return True
+            if key in (curses.KEY_UP, ord('k')):
+                ed.move_route(-1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                ed.move_route(1)
+                return True
+            if key == ord('d'):
+                ed.stage_delete(self.current_pref_index)
+                return True
+            if key in (10, 13, curses.KEY_ENTER):
+                ed.stage_save_edit()
+                return True
+            if key == 27:
+                ed.cancel()
+                return True
+            return True
+        if ed.mode == "add":
+            if key in (10, 13, curses.KEY_ENTER):
+                if ed.input_buf.strip():
+                    ed.search(ed.input_buf.strip())
+                return True
+            if key in (8, 127, curses.KEY_BACKSPACE):
+                ed.input_buf = ed.input_buf[:-1]
+                return True
+            if 32 <= key <= 126:
+                ed.input_buf += chr(key)
+                return True
+            if key == 27:
+                ed.cancel()
+                return True
+            return True
+        if ed.mode == "results":
+            if key in (curses.KEY_UP, ord('k')):
+                ed.result_idx = max(0, ed.result_idx - 1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                ed.result_idx = min(len(ed.matches) - 1, ed.result_idx + 1)
+                return True
+            if key in (10, 13, curses.KEY_ENTER):
+                ed.choose_model()
+                return True
+            if key == 27:
+                ed.mode = "closed"
+                return True
+            return True
+        if ed.mode == "pick_prov":
+            if key in (curses.KEY_UP, ord('k')):
+                ed.move_pick(-1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                ed.move_pick(1)
+                return True
+            if key == ord(' '):
+                ed.toggle_pick()
+                return True
+            if key in (10, 13, curses.KEY_ENTER):
+                ed.stage_choice()
+                return True
+            if key == 27:
+                ed.mode = "results"
+                return True
+            return True
+        if ed.mode == "prov_mgmt":
+            if key in (curses.KEY_UP, ord('k')):
+                ed.pick_idx = max(0, ed.pick_idx - 1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                ed.pick_idx = min(len(ed._cfg_provs()) - 1, ed.pick_idx + 1)
+                return True
+            if key == ord(' '):
+                ed.toggle_provider_disable()
+                return True
+            if key == ord('r'):
+                ed.remove_provider()
+                return True
+            if key == ord('k'):  # key manager for selected provider
+                cfg = ed.ed.load()
+                provs = ed._cfg_provs(cfg)
+                if 0 <= ed.pick_idx < len(provs):
+                    ed.open_key_mgmt(provs[ed.pick_idx]["name"])
+                return True
+            if key == ord('m'):  # model browser for selected provider
+                cfg = ed.ed.load()
+                provs = ed._cfg_provs(cfg)
+                if 0 <= ed.pick_idx < len(provs):
+                    ed.open_model_browser(provs[ed.pick_idx]["name"])
+                return True
+            if key == ord('c'):  # test bench
+                ed.open_bench()
+                return True
+            if key == ord('a'):
+                ed.open_prov_add()
+                return True
+            if key == 27:
+                ed.cancel()
+                return True
+            return True
+        if ed.mode == "prov_add":
+            if key in (10, 13, curses.KEY_ENTER):
+                if ed.input_buf.strip():
+                    ed.add_provider(ed.input_buf.strip())
+                return True
+            if key in (8, 127, curses.KEY_BACKSPACE):
+                ed.input_buf = ed.input_buf[:-1]
+                return True
+            if 32 <= key <= 126:
+                ed.input_buf += chr(key)
+                return True
+            if key == 27:
+                ed.open_prov_mgmt()
+                return True
+            return True
+        if ed.mode in ("confirm_delete", "diff"):
+            if key in (ord('y'), ord('Y')):
+                if ed.mode == "confirm_delete":
+                    ed.exec_delete()
+                else:
+                    ed.commit_pending()
+                return True
+            if key in (27, ord('n'), ord('N')):
+                ed.pending = None
+                ed.mode = "closed"
+                ed.msg = "cancelled — nothing written"
+                return True
+            return True
+        if ed.mode == "result":
+            if key in (27, 10, 13, ord('q')):
+                ed.mode = "closed"
+                return True
+            return True
+        return True
+
+    def _render_editor_overlay(self, term, rows: int, cols: int) -> None:
+        """Full-screen editor takeover, Overview-style with bottom action bar."""
+        ed = self.editor
+        if ed.mode == "closed":
+            return
+
+        # --- body lines per mode ---
+        lines: List[str] = []
+        seg_rows: Dict[int, List] = {}  # line-idx -> colored segments
+        if ed.mode == "key_mgmt":
+            cfg = ed.ed.load()
+            keys, base_url = ed._keys_of(cfg, ed.km_prov)
+            lines.append(f"KEYS — {ed.km_prov}  ({len(keys)} pool(s))   {base_url}")
+            lines.append("")
+            start_idx = len(lines)
+            for i, k in enumerate(keys):
+                sel = ">" if i == ed.km_idx else " "
+                lines.append("")  # placeholder; colored below
+                res = ed.km_results.get(k)
+                st = ed.km_stats.get(k, {})
+                if res is not None:
+                    mark, mcolor = (("✅", 2) if res["ok"] else ("⚠️", 4))
+                    detail = res["detail"]
+                else:
+                    ok, fail = st.get("ok", 0), st.get("fail", 0)
+                    if ok == 0 and fail == 0:
+                        mark, mcolor, detail = ("·", 0, "no recent use")
+                    elif fail > 0 and ok == 0:
+                        mark, mcolor, detail = ("⚠️", 4, "recent: all failures")
+                    else:
+                        mark, mcolor, detail = ("✅", 2, "recent: working")
+                seg_rows[start_idx + i] = [
+                    (f" {sel} [{i}] {k:<36}", curses.A_BOLD),
+                    (mark, curses.color_pair(mcolor) | curses.A_BOLD),
+                    (f"  ok:{st.get('ok',0):<4} fail:{st.get('fail',0):<4}", 0),
+                    (f"  last:{(st.get('last') or '—')[11:19]}", 0),
+                    (f"  {detail}" if res else "", 0),
+                ]
+            lines.append("")
+            if getattr(ed, "km_note", None):
+                lines.append(ed.km_note)
+                ed.km_note = None
+        elif ed.mode == "km_add":
+            lines.append(f"ADD KEY to {ed.km_prov} — type env var name:")
+            lines.append(f"> {ed.km_input}_")
+            lines.append("")
+            lines.append(f"e.g. NVIDIA_API_KEY_4 — value goes in ~/.hermes/.env,")
+            lines.append(f"never in config.json or this TUI.")
+        elif ed.mode == "model_browser":
+            lines.append(f"MODELS — {ed.mb_prov}  ({len(ed.mb_models)} live)")
+            lines.append("")
+            start = max(0, ed.mb_idx - (rows - 9))
+            for i in range(start, min(start + rows - 9, len(ed.mb_models))):
+                sel = ">" if i == ed.mb_idx else " "
+                lines.append(f" {sel} {ed.mb_models[i]}")
+            lines.append("")
+            if ed.mb_result:
+                lines.append(f"  {ed.mb_result}")
+            lines.append(f"  bench slots: {len(getattr(ed, 'bench', []) or [])}/4")
+        elif ed.mode == "test_bench":
+            lines.append("TEST BENCH — up to 4 provider/model pairs")
+            lines.append("")
+            slots = getattr(ed, "bench", []) or []
+            if not slots:
+                lines.append("  (empty — add slots from model browser: c)")
+            for i, (pn, mdl) in enumerate(slots):
+                lines.append(f"  [{i+1}] {pn} / {mdl}")
+            lines.append("")
+            if ed.bench_results:
+                lines.append("RESULTS:")
+                for pn, mdl, r in ed.bench_results:
+                    verdict = "✅ OK" if r.get("ok") else f"⚠️ {r.get('detail','')[:40]}"
+                    lines.append(f"  {pn}/{mdl}: {verdict}")
+        elif ed.mode == "edit":
+            cur = ed._current_pref()
+            lines.append(f"EDIT preference '{cur['name'] if cur else '?'}'")
+            lines.append(ed.msg or "")
+            lines.append("")
+            # show each configured route with cursor
+            if cur is not None:
+                for i, r in enumerate(cur["routes"]):
+                    sel = ">" if i == ed.route_idx else " "
+                    lines.append(f" {sel} {r['provider']:<12} {r['model']}")
+            lines.append("")
+        elif ed.mode == "add":
+            lines.append("SEARCH — type part of a model name (fuzzy: glm 5, llama 3, qwen):")
+            lines.append(f"> {ed.input_buf}_")
+            lines.append("")
+            if ed.probe_results:
+                lines.extend(ed.probe_results[:3])
+        elif ed.mode == "results":
+            lines.append(ed.msg[:cols - 6])
+            lines.append("")
+            start = max(0, ed.result_idx - (rows - 8))
+            for i in range(start, min(start + rows - 8, len(ed.matches))):
+                mid, provs = ed.matches[i]
+                mark = ">" if i == ed.result_idx else " "
+                pl = ",".join(p[:8] for p in provs)
+                lines.append(f" {mark} {mid[:44]:<44} [{pl}]")
+            lines.append("")
+        elif ed.mode == "pick_prov":
+            lines.append(f"'{ed.chosen_model[:50]}' — which providers should serve it?")
+            lines.append("")
+            for i, p in enumerate(ed.chosen_provs):
+                mark = "[x]" if ed.pick_on.get(p) else "[ ]"
+                sel = ">" if i == ed.pick_idx else " "
+                lines.append(f" {sel} {mark} {p}")
+            lines.append("")
+        elif ed.mode == "prov_mgmt":
+            cfg = ed.ed.load()
+            provs = ed._cfg_provs(cfg)
+            dis = ed._disabled_set(cfg)
+            lines.append(f"PROVIDERS — {len(provs)} configured "
+                         f"({len(dis)} disabled)")
+            lines.append("")
+            for i, p in enumerate(provs):
+                sel = ">" if i == ed.pick_idx else " "
+                state = "[DISABLED]" if p["name"] in dis else "[active]"
+                lines.append(f" {sel} {p['name']:<12} {state:<12} {p['base_url'][:44]}")
+            lines.append("")
+            if ed.msg:
+                lines.append(ed.msg[:cols - 6])
+        elif ed.mode == "prov_add":
+            lines.append("ADD PROVIDER — format: name base_url key_env")
+            lines.append("example: myprov https://api.example.com/v1 MY_KEY_ENV_NAME")
+            lines.append(f"> {ed.input_buf}_")
+            lines.append("")
+            if ed.probe_results:
+                lines.extend(ed.probe_results[:2])
+        elif ed.mode == "confirm_delete":
+            lines.append(f"DELETE preference '{ed.pending_reason}' ?")
+            lines.append("This removes all its routes from config.json (backup kept).")
+            lines.append("")
+        elif ed.mode == "diff":
+            lines.append("STAGED CHANGES — nothing written yet:")
+            lines.append("")
+            old = ed.ed.load()
+            if ed.pending is not None:
+                lines.extend(ed.ed.diff_summary(old, ed.pending)[:rows - 9])
+            lines.append("")
+        elif ed.mode == "result":
+            lines.append(ed.msg[:cols - 6] if ed.msg else "")
+            lines.append("")
+            lines.extend([r[:cols - 6] for r in ed.probe_results[:rows - 8]])
+            lines.append("")
+
+        # --- action bar per mode (persistently visible, like overview) ---
+        actions = {
+            "edit":         "[e]=toggle route   [j/k]=select route   [d]=delete pref   [Enter]=save   [Esc]=cancel",
+            "add":          "[type]=query   [Enter]=search all catalogs   [Esc]=cancel",
+            "results":      "[j/k]=select model   [Enter]=pick   [Esc]=cancel",
+            "pick_prov":    "[space]=toggle provider   [Enter]=stage   [Esc]=back to results",
+            "prov_mgmt":    "[j/k]=select   [space]=disable/enable   [r]=remove   [a]=add provider   [k]=keys   [m]=models   [c]=bench   [Esc]=close",
+            "prov_add":     "[type]=name url key_env   [Enter]=probe+stage   [Esc]=back",
+            "key_mgmt":     "[t]=test key   [T]=test ALL   [a]=add key   [d]=delete   [Esc]=browse models",
+            "km_add":       "[type]=env var name   [Enter]=stage   [Esc]=back",
+            "model_browser": "[j/k]=select model   [t]=test   [a]=route it   [c]=add to bench   [Esc]=close",
+            "test_bench":   "[r]=run all slots   [x]=clear   [Esc]=close",
+            "confirm_delete": "[y]=DELETE   [n/Esc]=cancel",
+            "diff":         "[y]=write to config.json (backup auto-made)   [n/Esc]=discard",
+            "result":       "[any key]=close",
+        }[ed.mode]
+
+        # --- render: Overview-style boxed body, key help at rows-2 ---
+        body_h = rows - 5  # header(2) + key help(1) + disclaimer(1) + margin
+        y = 0
+        title = f" ROUTE EDITOR — {ed.mode.upper()} "
+        term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+        w = cols - 4
+        term.write(y, 0, f"┌ {ed.mode.upper()} {'─' * max(0, w - len(ed.mode) - 2)}┐", curses.color_pair(1))
+        shown = 0
+        for line in lines:
+            if shown >= body_h - 1:
+                break
+            if shown in seg_rows:
+                # colored segment row
+                term.write(y + 1 + shown, 2, "│ ", curses.color_pair(1))
+                x = 4
+                room = w - 2
+                for text, attr in seg_rows[shown]:
+                    if room <= 0 or not text:
+                        break
+                    term.write(y + 1 + shown, x, text[:room], attr)
+                    x += len(text[:room])
+                    room -= len(text[:room])
+                term.write(y + 1 + shown, w + 2, " │", curses.color_pair(1))
+            else:
+                term.write(y + 1 + shown, 2, f"│ {line[:w - 2].ljust(w - 2)[:w - 2]} │")
+            shown += 1
+        term.write(y + 1 + shown, 0, f"└{'─' * w}┘", curses.color_pair(1))
+
+        # Action bar: key help position like Overview, disclaimer below
+        self._render_key_help(term, rows - 2, cols)
+        term.write(rows - 1, 0, actions[:cols - 1], curses.A_BOLD | curses.color_pair(4))
+
+    def render(self, term) -> None:
+        """Render routes screen (or full-screen editor takeover)."""
+        rows, cols = term.size.rows, term.size.cols
+
+        # Editor takeover: full screen, skip the matrix behind it
+        if self.editor.mode != "closed":
+            self._render_editor_overlay(term, rows, cols)
+            return
+
+        y = 0
+
+        # Header (Overview style)
+        if self.app_state.last_refresh:
+            time_str = self.app_state.last_refresh.strftime("%H:%M:%S")
+        else:
+            time_str = "--:--:--"
+        left = "ROUTES  " + f"{len(list(self.app_state.config.preferences)) if self.app_state.config else 0} preferences"
+        term.write(y, 0, left, curses.color_pair(2) | curses.A_BOLD)
+        term.write(y, cols - len(time_str) - 2, time_str, curses.color_pair(5))
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+
+        prefs = list(self.app_state.config.preferences) if self.app_state.config else []
+
+        if not prefs:
+            term.write(y, 0, "No preferences configured — press [a] to add one", curses.color_pair(5))
+            self._render_key_help(term, rows - 2, cols)
+            self._render_disclaimer(term, rows - 1, cols)
+            return
+
+        # Preference tabs (boxed, Overview style) — active tab highlighted green
+        w = cols - 4
+        term.write(y, 0, f"┌ PREFERENCES {'─' * max(0, w - 13)}┐", curses.color_pair(1))
+        # render tabs as colored segments: active = green bold, inactive = dim
+        term.write(y + 1, 2, "│ ", curses.color_pair(1))
+        tx = 4
+        room = w - 2
+        for i, pref in enumerate(prefs):
+            label = f"[{pref.name}]  " if i == self.current_pref_index else f" {pref.name}   "
+            attr = (curses.color_pair(2) | curses.A_BOLD if i == self.current_pref_index
+                    else curses.A_DIM)
+            if room <= 0:
+                break
+            term.write(y + 1, tx, label[:room], attr)
+            tx += len(label[:room])
+            room -= len(label[:room])
+        term.write(y + 1, w + 2, " │", curses.color_pair(1))
+        term.write(y + 2, 0, f"└{'─' * w}┘", curses.color_pair(1))
+        y += 3
+
+        current_pref = prefs[self.current_pref_index]
+
+        # Matrix box — header + colored cells via segment rendering
+        header, model_segs = self._build_matrix_segments(current_pref, cols - 4)
+        box_title = f"ROUTES — {current_pref.name}"
+        term.write(y, 0, f"┌ {box_title} {'─' * max(0, w - len(box_title) - 2)}┐", curses.color_pair(1))
+        my = y + 1
+        # header row (bold cyan)
+        term.write(my, 2, "│ ", curses.color_pair(1))
+        term.write(my, 4, header[:w - 2].ljust(w - 2), curses.color_pair(5) | curses.A_BOLD)
+        term.write(my, w + 2, " │", curses.color_pair(1))
+        my += 1
+        term.write(my, 2, f"│ {'─' * (w - 2)} │", curses.color_pair(1))
+        my += 1
+        # model rows: model name bold white + colored status cells
+        for segs in model_segs:
+            if my >= rows - 3:
+                break
+            term.write(my, 2, "│ ", curses.color_pair(1))
+            x = 4
+            room = w - 2
+            for text, attr in segs:
+                if room <= 0:
+                    break
+                term.write(my, x, text[:room], attr)
+                x += len(text[:room])
+                room -= len(text[:room])
+            term.write(my, w + 2, " │", curses.color_pair(1))
+            my += 1
+        # legend
+        if my < rows - 3:
+            term.write(my, 2, f"│ {'─' * (w - 2)} │", curses.color_pair(1))
+            my += 1
+            legend = "Legend: "
+            term.write(my, 2, "│ ", curses.color_pair(1))
+            lx = 4
+            for text, attr in [("Legend: ", curses.A_DIM),
+                               ("●", curses.color_pair(2)), ("=healthy  ", curses.A_DIM),
+                               ("◐", curses.color_pair(3)), ("=degraded  ", curses.A_DIM),
+                               ("○", curses.color_pair(4)), ("=unknown  ", curses.A_DIM),
+                               ("·", curses.A_DIM), ("=not configured", curses.A_DIM)]:
+                if lx + len(text) > w + 1:
+                    break
+                term.write(my, lx, text, attr)
+                lx += len(text)
+            term.write(my, w + 2, " │", curses.color_pair(1))
+            my += 1
+        term.write(my, 0, f"└{'─' * w}┘", curses.color_pair(1))
+
+        # Restart-needed banner if editor wrote config
+        if self.editor.need_restart:
+            term.write(rows - 4, 0, "⚠ CONFIG CHANGED — restart router to apply: kill $(pgrep -f '^\\./router$'); bash ~/bin/startr", curses.color_pair(3) | curses.A_BOLD)
+
+        self._render_key_help(term, rows - 2, cols)
+        self._render_disclaimer(term, rows - 1, cols)
+
+    def _render_key_help(self, term, y: int, cols: int) -> None:
+        help_text = ("[Tab]=next pref  [e]=edit  [a]=add model  [d]=delete  "
+                     "[x]=test route  [o]=providers  [←/→]=scroll  [p/r/y/d/s/k]=screens  [q]=quit")
+        term.write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
+
+    def _render_disclaimer(self, term, y: int, cols: int) -> None:
+        disclaimer = ("EDITOR ACTIVE  |  writes config.json with .bak backup  |  "
+                      "router restart required after save")
+        term.write(y, 0, disclaimer[:cols], curses.color_pair(8))
+
+    def _build_matrix_segments(self, pref, cols: int):
+        """Build matrix as (header, per-model segment rows) with colored cells.
+        GREEN ● healthy / YELLOW ◐ degraded / RED ○ failing / DIM · not routed.
+        Cell priority: JSONL per-(provider,model) results > provider-level /health."""
+        w = cols - 4
+        providers = list(self.app_state.providers.keys())
+        provider_health = {name: pm.health for name, pm in self.app_state.providers.items()}
+        mh = getattr(self.app_state, '_model_health', {})
+
+        # ORDER: providers routed for THIS preference first (in route order),
+        # then unrouted ones last — so active columns lead the matrix
+        routed = [r.provider for r in pref.routes if r.provider in providers]
+        routed = list(dict.fromkeys(routed))  # dedupe, keep order
+        unrouted = [p for p in providers if p not in routed]
+        providers = routed + unrouted
+
+        shown = providers[self.horizontal_scroll:self.horizontal_scroll + self.max_visible_providers]
+        # Adaptive column width: shrink when many providers so the matrix fits
+        col_w = 12 if len(shown) <= 5 else (10 if len(shown) <= 7 else 8)
+        # "Model" padded to 15 = the model-name column width in data rows
+        header = f"{'Model':<15}"
+        for p in shown:
+            header += f"  {p[:col_w]:<{col_w}}"
+
+        models = []
+        for route in pref.routes:
+            if route.model not in models:
+                models.append(route.model)
+
+        rows_segs = []
+        for model in models:
+            segs = [(f"{model[:15]:<15}", curses.A_BOLD)]
+            for p in shown:
+                has_route = any(r.provider == p and r.model == model for r in pref.routes)
+                if not has_route:
+                    segs.append((f"  {'·':<{col_w}}", curses.A_DIM))
+                    continue
+
+                # 1) JSONL per-(provider, model) results — ground truth when present
+                st = mh.get((p, model))
+                if st:
+                    total = st["ok"] + st["fail"]
+                    pct = (st["ok"] / total * 100) if total else 0
+                    if pct >= 80:
+                        segs.append((f"  {'●':<{col_w}}", curses.color_pair(2) | curses.A_BOLD))
+                    elif pct >= 40:
+                        segs.append((f"  {'◐':<{col_w}}", curses.color_pair(3) | curses.A_BOLD))
+                    else:
+                        segs.append((f"  {'○':<{col_w}}", curses.color_pair(4) | curses.A_BOLD))
+                    continue
+
+                # 2) Fall back to provider-level health
+                health = provider_health.get(p)
+                if health and health.healthy:
+                    segs.append((f"  {'●':<{col_w}}", curses.color_pair(2) | curses.A_BOLD))
+                elif health and not health.healthy:
+                    segs.append((f"  {'◐':<{col_w}}", curses.color_pair(3) | curses.A_BOLD))
+                else:
+                    segs.append((f"  {'○':<{col_w}}", curses.color_pair(4) | curses.A_BOLD))
+            rows_segs.append(segs)
+        return header, rows_segs
+
+    def _build_matrix_lines(self, pref, cols: int) -> List[str]:
+        """Build matrix lines for a preference."""
+        lines = []
+        w = cols - 4
+        
+        providers = list(self.app_state.providers.keys())
+        provider_health = {name: pm.health for name, pm in self.app_state.providers.items()}
+        
+        # Header
+        header = "Model"
+        for p in providers[self.horizontal_scroll:self.horizontal_scroll + self.max_visible_providers]:
+            header += f"  {p[:10]:<10}"
+        lines.append(header[:w])
+        lines.append("─" * w)
+        
+        # Get all unique models for this preference
+        models = []
+        for route in pref.routes:
+            if route.model not in models:
+                models.append(route.model)
+        
+        # For each model, show which providers have it
+        for model in models:
+            line = f"{model[:15]:<15}"
+            for p in providers[self.horizontal_scroll:self.horizontal_scroll + self.max_visible_providers]:
+                has_route = any(r.provider == p and r.model == model for r in pref.routes)
+                health = provider_health.get(p)
+                
+                if has_route:
+                    if health and health.healthy:
+                        line += f"  {'●':<10}"  # Configured and healthy
+                    elif health and not health.healthy:
+                        line += f"  {'◐':<10}"  # Configured but degraded
+                    else:
+                        line += f"  {'○':<10}"  # Configured, unknown health
+                else:
+                    line += f"  {'·':<10}"  # Not configured
+            lines.append(line[:w])
+        
+        # Health legend row
+        lines.append("─" * w)
+        legend = "Legend: ●=healthy  ◐=degraded  ○=unknown  ·=not configured"
+        lines.append(legend[:w])
+        
+        return lines

@@ -19,6 +19,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"craftedworkflows-router/strategy"
 )
 
 type Provider struct {
@@ -88,12 +90,10 @@ var (
 	cfgMu sync.RWMutex
 )
 
-// lkgp tracks the last-known-good provider per preference name for LKGP
-// routing (try the provider that last succeeded first).
-var (
-	lkgp   = make(map[string]string)
-	lkgpMu sync.Mutex
-)
+// StrategyRegistry holds all routing strategies
+var strategyRegistry *strategy.Registry
+
+// LKGP state is now managed by the LKGPStrategy
 
 func providerByName(name string) *Provider {
 	cfgMu.RLock()
@@ -1641,26 +1641,28 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	preferenceFrom := ""
 	preferenceTo := ""
 
-	// LKGP (last-known-good-provider): UNVERIFIED — authored but never tested.
-	// Neutralized 2026-10-23: type error (RouteSpec) plus zero test coverage.
-	// Re-enable only after test-env verification. See go-router-infrastructure.
-	orderedRoutes := preference.Routes
-	_ = orderedRoutes
-	if false {
-		lkgpMu.Lock()
-		lkgpProvider := lkgp[preference.Name]
-		lkgpMu.Unlock()
+	// Track the original preference for LKGP pinning on cross-preference fallback success
+	originalPreference := preference.Name
 
-		if lkgpProvider != "" {
-			orderedRoutes = make([]Route, 0, len(preference.Routes))
-			for _, rt := range preference.Routes {
-				if rt.Provider == lkgpProvider {
-					orderedRoutes = append(orderedRoutes, rt)
+	// LKGP Strategy: try pinned provider first
+	orderedRoutes := preference.Routes
+	if strategyRegistry != nil {
+		if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
+			if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
+				// Build dummy targets for the strategy
+				dummyTargets := make([]strategy.Target, len(preference.Routes))
+				for i, rt := range preference.Routes {
+					dummyTargets[i] = strategy.Target{Provider: rt.Provider, Model: rt.Model}
 				}
-			}
-			for _, rt := range preference.Routes {
-				if rt.Provider != lkgpProvider {
-					orderedRoutes = append(orderedRoutes, rt)
+				
+				orderedStrategyTargets := lkgpStrat.Apply(r.Context(), dummyTargets, &strategy.Request{
+					Preference: preference.Name,
+				})
+				
+				// Convert back to Route slice
+				orderedRoutes = make([]Route, len(orderedStrategyTargets))
+				for i, t := range orderedStrategyTargets {
+					orderedRoutes[i] = Route{Provider: t.Provider, Model: t.Model}
 				}
 			}
 		}
@@ -1729,12 +1731,16 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 						}
 
 						if success {
-							// LKGP: record which provider succeeded for this
-							// preference so the next request tries it first.
-							lkgpMu.Lock()
-							lkgp[preference.Name] = p.Name
-							lkgpMu.Unlock()
-							return
+										// LKGP: record which provider succeeded for this
+										// preference so the next request tries it first.
+										if strategyRegistry != nil {
+											if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
+												if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
+													lkgpStrat.SetPin(originalPreference, p.Name)
+												}
+											}
+										}
+										return
 						}
 
 						// A 401 means the current provider key failed.
@@ -2154,6 +2160,12 @@ func main() {
 	initMetrics()
 	setupLogging()
 	loadConfig()
+
+	// Initialize strategy registry
+	strategyRegistry = strategy.NewRegistry()
+
+	// Register LKGP strategy after config is loaded
+	strategyRegistry.Register("lkgp", strategy.NewLKGPStrategy(strategy.DefaultLKGPConfig()))
 
 	go catalogLoop()
 	go hardFailureRecoveryLoop()

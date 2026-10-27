@@ -8,13 +8,49 @@
     "max_cooldown_seconds": 120,
     "all_failed_wait_seconds": 10,
     "hard_failed_wait_seconds": 10,
-    "route_timeout_seconds": 360,
+    "route_timeout_seconds": 300,
     "stream_idle_timeout_seconds": 300,
-    "first_event_timeout_seconds": 90,
+    "first_event_timeout_seconds": 180,
     "continuation_max": 0,
     "max_hold_seconds": 30
   },
   "preferences": [
+    {
+      "name": "z-ai/glm-5.3",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "z-ai/glm-5.3"
+        }
+      ]
+    },
+    {
+      "name": "nvidia/nemotron-3-ultra-550b-a55b",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        }
+      ]
+    },
     {
       "name": "glm-5.3",
       "context_window": 1048576,
@@ -48,6 +84,24 @@
         {
           "provider": "zydit-v2",
           "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        }
+      ]
+    },
+    {
+      "name": "minimaxai/minimax-m3.1-flash",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "minimaxai/minimax-m3.1-flash"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "minimaxai/minimax-m3.1-flash"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "minimaxai/minimax-m3.1-flash"
         }
       ]
     }

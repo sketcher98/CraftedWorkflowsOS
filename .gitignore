@@ -82,12 +82,9 @@ router/router-30s-test.log
 router/router-sse-preflight-test
 router/router-test-run/
 router/sse-test/
-router/test-env/
 router/test-phase2/
-router/routeops/
 router/backup-*/
 router/rollback-*/
-router/routeops/
 
 # Router binaries and artifacts
 router/router
