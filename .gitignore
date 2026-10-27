@@ -195,8 +195,26 @@ venv/
 *.rar
 *.7z
 
-# Router test/rebuild directories
-router/
+# Router: source is tracked (routeops/, strategy/, main.go, config.json, docs, test-env).
+# These rules ignore only regenerable artifacts — never blackhole the whole directory again.
+router/craftedworkflows-router
+router/router*
+router/core
+router/mock
+router/*-mock
+router/sse-test
+router/backup-*
+router/rollback-*
+router/*.log*
+router/*.jsonl
+router/*.rollback-*
+router/main.go.*
+router/config.json.*
+router/config.*.json
+router/test-env/mock*
+router/test-env/test-router*
+router/test-env/*.log*
+router/test-env/*.jsonl
 router-isolated/
 router-probe/
 router-rebuild/
