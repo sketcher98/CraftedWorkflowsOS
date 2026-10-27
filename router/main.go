@@ -1644,35 +1644,36 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	// Track the original preference for LKGP pinning on cross-preference fallback success
 	originalPreference := preference.Name
 
-	// LKGP Strategy: try pinned provider first
-	orderedRoutes := preference.Routes
-	if strategyRegistry != nil {
-		if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
-			if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
-				// Build dummy targets for the strategy
-				dummyTargets := make([]strategy.Target, len(preference.Routes))
-				for i, rt := range preference.Routes {
-					dummyTargets[i] = strategy.Target{Provider: rt.Provider, Model: rt.Model}
-				}
-				
-				orderedStrategyTargets := lkgpStrat.Apply(r.Context(), dummyTargets, &strategy.Request{
-					Preference: preference.Name,
-				})
-				
-				// Convert back to Route slice
-				orderedRoutes = make([]Route, len(orderedStrategyTargets))
-				for i, t := range orderedStrategyTargets {
-					orderedRoutes[i] = Route{Provider: t.Provider, Model: t.Model}
-				}
-			}
-		}
-	}
-
 	for {
 		attempted := false
 		fallbackCount := 0
 		fallbackFrom := ""
 		skippedHardFailed := false
+
+		// LKGP Strategy: try pinned provider first — recomputed PER PREFERENCE so a
+		// preference fallback re-orders the NEXT preference's routes, not the old ones.
+		orderedRoutes := preference.Routes
+		if strategyRegistry != nil {
+			if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
+				if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
+					// Build dummy targets for the strategy
+					dummyTargets := make([]strategy.Target, len(preference.Routes))
+					for i, rt := range preference.Routes {
+						dummyTargets[i] = strategy.Target{Provider: rt.Provider, Model: rt.Model}
+					}
+
+					orderedStrategyTargets := lkgpStrat.Apply(r.Context(), dummyTargets, &strategy.Request{
+						Preference: preference.Name,
+					})
+
+					// Convert back to Route slice
+					orderedRoutes = make([]Route, len(orderedStrategyTargets))
+					for i, t := range orderedStrategyTargets {
+						orderedRoutes[i] = Route{Provider: t.Provider, Model: t.Model}
+					}
+				}
+			}
+		}
 
 		for _, route := range orderedRoutes {
 			p := providerByName(route.Provider)
