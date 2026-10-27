@@ -69,6 +69,9 @@ type RetryConfig struct {
 	// FirstEventTimeoutSeconds: fail fast when a provider sends headers but
 	// no data at all within this window (pre-commit abort → failover).
 	FirstEventTimeoutSeconds int `json:"first_event_timeout_seconds"`
+	// C (hold-and-serve): how long an exhausted router PARKS a request
+	// re-checking cooldowns before emitting the legacy 503. 0 disables hold.
+	MaxHoldSeconds int `json:"max_hold_seconds"`
 }
 
 type Config struct {
@@ -756,6 +759,47 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// C (hold-and-serve): park an exhausted request instead of 503ing it.
+// Ticks every second; the first cooldown that expires releases the hold and
+// the caller re-walks the route chain. Client cancel aborts. Exceeding
+// max_hold_seconds falls back to the legacy 503 router_exhausted signal.
+// Returns true if the request should be retried, false if it was answered.
+func holdAndServe(w http.ResponseWriter, r *http.Request) bool {
+	maxHold := time.Duration(cfg.Retry.MaxHoldSeconds) * time.Second
+	if maxHold <= 0 {
+		waitForRecovery(w, r)
+		return false
+	}
+	log.Printf("hold-and-serve: parking request up to %s (all routes cooling)", maxHold)
+
+	holdDeadline := time.NewTimer(maxHold)
+	defer holdDeadline.Stop()
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			log.Printf("hold-and-serve: client cancelled during hold")
+			return false
+		case <-holdDeadline.C:
+			log.Printf("hold-and-serve: max hold %s exceeded, emitting 503", maxHold)
+			waitForRecovery(w, r)
+			return false
+		case <-tick.C:
+			// earliestCooldown() <= 0 means some route left cooldown: retry now.
+			wait := earliestCooldown()
+			if wait == -1 {
+				continue // all hard-failed: probe loop owns recovery; keep holding
+			}
+			if wait <= 0 {
+				log.Printf("hold-and-serve: cooldown expired, re-walking routes")
+				return true
+			}
+		}
+	}
 }
 
 func waitForRecovery(w http.ResponseWriter, r *http.Request) {
@@ -1765,8 +1809,13 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// All configured preferences have been exhausted.
-		// Return 503 immediately and let background recovery continue.
-		waitForRecovery(w, r)
+		// C (hold-and-serve): park and wait for a cooldown to expire,
+		// then re-walk every preference from the top. Only emit the
+		// legacy 503 if the hold window itself is exceeded.
+		if holdAndServe(w, r) {
+			preference = firstPreference()
+			continue
+		}
 		return
 	}
 }

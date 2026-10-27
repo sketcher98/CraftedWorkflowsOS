@@ -1,16 +1,18 @@
 {
   "host": "127.0.0.1",
   "port": 8643,
-  "catalog_refresh_seconds": 1800,
+  "catalog_refresh_seconds": 300,
   "retry": {
     "failure_limit": 2,
     "cooldown_seconds": 20,
-    "max_cooldown_seconds": 900,
+    "max_cooldown_seconds": 120,
     "all_failed_wait_seconds": 10,
     "hard_failed_wait_seconds": 10,
-    "route_timeout_seconds": 120,
-    "stream_idle_timeout_seconds": 180,
-    "first_event_timeout_seconds": 45
+    "route_timeout_seconds": 360,
+    "stream_idle_timeout_seconds": 300,
+    "first_event_timeout_seconds": 90,
+    "continuation_max": 0,
+    "max_hold_seconds": 30
   },
   "preferences": [
     {
@@ -19,7 +21,7 @@
       "routes": [
         {
           "provider": "nvidia",
-          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+          "model": "z-ai/glm-5.3"
         },
         {
           "provider": "zydit-v1",
@@ -28,34 +30,6 @@
         {
           "provider": "zydit-v2",
           "model": "z-ai/glm-5.3"
-        }
-      ]
-    },
-    {
-      "name": "glm-5.3-free",
-      "context_window": 1048576,
-      "routes": [
-        {
-          "provider": "zydit-v4",
-          "model": "glm-5.3-free"
-        }
-      ]
-    },
-    {
-      "name": "glm-5.3-flash",
-      "context_window": 1048576,
-      "routes": [
-        {
-          "provider": "nvidia",
-          "model": "z-ai/glm-5.3-flash"
-        },
-        {
-          "provider": "zydit-v1",
-          "model": "z-ai/glm-5.3-flash"
-        },
-        {
-          "provider": "zydit-v2",
-          "model": "z-ai/glm-5.3-flash"
         }
       ]
     },
