@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 
 from routeops.adapters.config_editor import (
     ConfigEditor, ConfigEditorError, router_restart_pending_note)
+from routeops.tui.bars import CLIENT_ABORT_ERRORS
 
 
 def _norm(s: str) -> str:
@@ -110,8 +111,12 @@ class RouteEditor:
                 ke = e.get("key_env")
                 if not ke:
                     continue
-                s = stats.setdefault(ke, {"ok": 0, "fail": 0, "last": None})
-                if e.get("outcome") == "success":
+                s = stats.setdefault(ke, {"ok": 0, "fail": 0, "abort": 0, "last": None})
+                # Client aborts are neutral — same rule as every other screen.
+                err = (e.get("error") or "").strip().lower()
+                if any(m in err for m in CLIENT_ABORT_ERRORS):
+                    s["abort"] += 1
+                elif e.get("outcome") == "success":
                     s["ok"] += 1
                 else:
                     s["fail"] += 1

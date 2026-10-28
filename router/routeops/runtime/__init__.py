@@ -28,6 +28,7 @@ from routeops.adapters.config_read import ConfigAdapter, RouterConfig
 from routeops.adapters.process_inspect import ProcessInspectAdapter, ProcessCandidate
 from routeops.reconstruction import RequestReconstructor, ReconstructedRequest
 from routeops.state import AppState, ScreenType
+from routeops.tui.bars import is_client_abort
 from routeops.config import (
     ROUTER_EVENTS_JSONL, ROUTER_BASE_URL, ROUTER_CONFIG_JSON,
     POLL_INTERVALS, DEFAULT_REFRESH_INTERVAL
@@ -111,6 +112,10 @@ class RouteOpsRuntime:
 
         self.worker_manager.start_all()
         self._running = True
+        # Sync router endpoint from config to app_state for display
+        from routeops.config import ROUTER_HOST, ROUTER_PORT
+        self.app_state.router_host = ROUTER_HOST
+        self.app_state.router_port = ROUTER_PORT
 
     def _run_main_loop(self) -> None:
         """Main event loop - runs on main thread only."""
@@ -301,6 +306,9 @@ class RouteOpsRuntime:
 
     def _apply_process_update(self, update) -> None:
         """Apply process update to AppState."""
+        # Live Hermes PIDs (evidence for the SYSTEM box — never a literal)
+        self.app_state._hermes_pids = list(getattr(update, "hermes_pids", []) or [])
+
         production = None
         for candidate in update.candidates:
             if candidate.identity == "PRODUCTION":
@@ -346,32 +354,11 @@ class RouteOpsRuntime:
         # Convert JSONLEvent to EventModel and add to recent events
         for event in update.events:
             if event.parsed:
-                # Parse timestamp
-                ts_str = event.parsed.get('timestamp', '')
-                try:
-                    timestamp = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
-                    # Convert UTC to local timezone for display
-                    timestamp = timestamp.astimezone()
-                except (ValueError, AttributeError):
-                    timestamp = datetime.now()
-                
-                ev = EventModel(
-                    timestamp=timestamp,
-                    event_type=event.parsed.get('event', ''),
-                    request_id=event.parsed.get('request_id'),
-                    provider=event.parsed.get('provider'),
-                    model=event.parsed.get('model'),
-                    preference=event.parsed.get('preference'),
-                    outcome=event.parsed.get('outcome'),
-                    status=event.parsed.get('status', event.parsed.get('status_code')),
-                    latency_ms=event.parsed.get('latency_ms'),
-                    error=event.parsed.get('error') or event.parsed.get('message'),
-                    cooldown_seconds=event.parsed.get('cooldown_seconds'),
-                    cooldown_until=None,
-                    from_preference=event.parsed.get('from_preference'),
-                    to_preference=event.parsed.get('to_preference'),
-                    context=event.parsed.get('context', 'request'),
-                )
+                # EventModel.from_json is the single parser — it maps every
+                # field the router emits (including key_env). The previous
+                # hand-rolled constructor silently dropped key_env, which
+                # made every per-key screen report zero observations.
+                ev = EventModel.from_json(event.parsed)
                 self.app_state.add_event(ev)
 
         # Recompute per-model health from the JSONL-derived events
@@ -386,7 +373,17 @@ class RouteOpsRuntime:
     def _recompute_model_health(self) -> None:
         """Derive per (provider, model) health from recent route_result events.
         Only counts events since router process start (not TUI start) so health
-        reflects full process lifetime even if TUI restarts."""
+        reflects full process lifetime even if TUI restarts.
+
+        Outcomes are classified three ways (F1/F2):
+          success      -> ok
+          client abort -> abort (NEUTRAL - the CLIENT hung up, not the provider)
+          anything else-> fail (the provider's fault)
+
+        A client abort must NOT count against a provider: Hermes cancelling a
+        slow stream says nothing about provider quality, and charging it as a
+        failure made a healthy provider render 0% after one disconnect.
+        """
         # Use router process start time as baseline (survives TUI restarts)
         router_start = None
         if self.app_state.process_info and self.app_state.process_info.uptime_seconds > 0:
@@ -409,11 +406,8 @@ class RouteOpsRuntime:
             if baseline and ev.timestamp and ev.timestamp < baseline:
                 continue
             key = (ev.provider, ev.model)
-            bucket = stats.setdefault(key, {"ok": 0, "fail": 0, "last_ts": None, "last_outcome": None})
-            if ev.outcome == 'success':
-                bucket["ok"] += 1
-            else:
-                bucket["fail"] += 1
+            bucket = stats.setdefault(key, {"ok": 0, "fail": 0, "abort": 0, "last_ts": None, "last_outcome": None})
+            bucket["abort" if is_client_abort(ev) else ("ok" if ev.outcome == 'success' else "fail")] += 1
             if ev.timestamp and (bucket["last_ts"] is None or ev.timestamp > bucket["last_ts"]):
                 bucket["last_ts"] = ev.timestamp
                 bucket["last_outcome"] = ev.outcome

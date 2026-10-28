@@ -11,6 +11,7 @@ from routeops.models.provider import ProviderHealth
 from routeops.tui.bars import (
     pct_bar, pct_subbar, pct_label, tier_color, tier_icon, hardfail_icon,
     provider_rollup, provider_routes, cooldown_text, BAR_CELLS,
+    verdict, status_from_verdict, health_display,
 )
 
 
@@ -80,6 +81,19 @@ class ProvidersScreen:
             else:
                 return False  # Let parent handle
             return True
+        
+        if key == ord('m'):  # Key Management (Termux-safe; was Shift+K, unreachable on phone)
+            if providers:
+                self.app_state.detail_target = providers[self.selected_index]
+                # Signal to parent to switch to keymgmt screen
+                return "keymgmt"
+            return True
+
+        if key == ord('i'):  # Per-Key Health (inspect keys of selected provider)
+            if providers:
+                self.app_state.detail_target = providers[self.selected_index]
+                return "perkey"
+            return True
 
         return False
 
@@ -127,7 +141,7 @@ class ProvidersScreen:
         y = 0
 
         # Title bar
-        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=test  [h/Esc] Back"
+        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=test  [m]=keys  [i]=per-key  [h/Esc] Back"
         term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
@@ -179,22 +193,34 @@ class ProvidersScreen:
                 y += 1
                 shown += 1
 
-            # Summary line — same accounting as Overview
+            # Summary line — SAME accounting as the rendered rows. Counting by
+            # /health alone made the summary claim 'OK: 3' while two rows
+            # rendered DEGRADED — the summary must match what is on screen.
             n_total = len(providers)
             if n_total:
-                n_ok = n_cool = n_hard = n_noroute = 0
+                n_ok = n_cool = n_hard = n_noroute = n_deg = 0
                 for name in providers:
-                    h = self.app_state.providers[name].health
+                    pm = self.app_state.providers[name]
+                    h = pm.health
                     if provider_routes(self.app_state, name) == 0:
                         n_noroute += 1
-                    elif h.hard_failed:
+                        continue
+                    if h.hard_failed:
                         n_hard += 1
-                    elif not h.healthy:
+                        continue
+                    if not h.healthy:
                         n_cool += 1
-                    else:
+                        continue
+                    pct, ok_t, fail_t, _ab = provider_rollup(self.app_state, name)
+                    v = verdict(pct, ok_t + fail_t)
+                    if v == "healthy":
                         n_ok += 1
+                    else:
+                        n_deg += 1
                 routed_total = n_total - n_noroute
                 summary = f"Total: {n_total}  Routed: {routed_total}  OK: {n_ok}"
+                if n_deg:
+                    summary += f"  Degraded: {n_deg}"
                 if n_cool:
                     summary += f"  Cool: {n_cool}"
                 if n_hard:
@@ -224,7 +250,7 @@ class ProvidersScreen:
         else:
             keys = 0
 
-        pct, _ok, _fail = provider_rollup(self.app_state, name)
+        pct, _ok, _fail, _abort = provider_rollup(self.app_state, name)
         n_routes = provider_routes(self.app_state, name)
 
         # Unrouted provider: configured but no preference routes to it.
@@ -239,29 +265,36 @@ class ProvidersScreen:
             ]
             return segs
 
+        # ONE shared verdict drives the bar, the icon AND the status word —
+        # '0.0% ○ HEALTHY' is impossible by construction.
+        in_cd = not health.healthy and not health.hard_failed
+        hv = health_display(pct, _ok + _fail, _fail, in_cd)
+
         # Status word + icon: hard-failed wins, then /health state
         if health.hard_failed:
             icon, ic = hardfail_icon()
             status = "HARD-FAILED"
             st_color = curses.color_pair(4) | curses.A_BOLD
-        elif not health.healthy:
+            bar_c = curses.color_pair(4)
+        elif in_cd:
             icon, ic = ("◐", curses.color_pair(3))
             status = "COOLDOWN"
             st_color = curses.color_pair(3)
+            bar_c = hv.bar_color
         else:
-            # HEALTHY: icon reflects REAL JSONL success, not just /health
-            icon, ic = tier_icon(pct)
-            status = "HEALTHY"
-            st_color = curses.color_pair(2)
+            icon, ic = hv.icon, hv.text_color
+            status = hv.status
+            st_color = hv.text_color
+            bar_c = hv.bar_color
 
         cd = cooldown_text(health)
 
         segs = [
             (f"{name:<12}  ", curses.A_BOLD),
-            (pct_bar(pct), tier_color(pct) | (0 if pct is not None else curses.A_DIM)),
-            (f" {pct_label(pct)} ", tier_color(pct) | curses.A_BOLD),
+            (pct_bar(hv.bar_pct), bar_c),
+            (f" {pct_label(hv.bar_pct)} ", bar_c | curses.A_BOLD),
             (f"{icon} ", ic),
-            (f"{status:<11} ", st_color),
+            (f"{status:<12} ", st_color),
             (f" fails:{failures:<2} ", 0),
             (f"{cd:>7}  ", 0),
             (f"models:{models:<3} ", 0),
@@ -330,17 +363,18 @@ class ProvidersScreen:
         lines.append(f"Base URL: {pm.config.base_url}")
 
         # Rollup header: real success % across this provider's active models
-        pct, ok_t, fail_t = provider_rollup(self.app_state, pm.config.name)
-        if pct is not None:
-            icon, ic = tier_icon(pct)
-            seg_rows[len(lines)] = [
-                ("  ", 0),
-                (pct_bar(pct), tier_color(pct)),
-                (f" {pct_label(pct)} ", tier_color(pct) | curses.A_BOLD),
-                (icon, ic),
-                (f"  rollup across active models  ok:{ok_t}  fail:{fail_t}", 0),
-            ]
-            lines.append("")  # placeholder
+        pct, ok_t, fail_t, abort_t = provider_rollup(self.app_state, pm.config.name)
+        hv = health_display(pct, ok_t + fail_t, fail_t)
+        seg_rows[len(lines)] = [
+            ("  ", 0),
+            (pct_bar(hv.bar_pct), hv.bar_color),
+            (f" {pct_label(hv.bar_pct)} ", hv.bar_color | curses.A_BOLD),
+            (hv.icon, hv.text_color),
+            (f"  {hv.status}  rollup across active models  ok:{ok_t}  fail:{fail_t}", 0),
+        ]
+        if abort_t:
+            seg_rows[len(lines)].append((f"  aborted:{abort_t}", curses.A_DIM))
+        lines.append("")  # placeholder
         lines.append("")
 
         # Per-model health derived from JSONL (route_result success/fail counts)
@@ -363,29 +397,40 @@ class ProvidersScreen:
                 st = prov_models.get((pm.config.name, model))
                 m_short = model.split("/")[-1][:24]
                 if st:
-                    total = st["ok"] + st["fail"]
-                    mpct = (st["ok"] / total * 100) if total else 0
-                    icon, ic = tier_icon(mpct)
+                    m_ok = st.get("ok", 0)
+                    m_fail = st.get("fail", 0)
+                    m_abort = st.get("abort", 0)
+                    total = m_ok + m_fail
+                    # ONE shared verdict — zero-traffic reads as NO DATA (empty bar),
+                    # a single failure reads DEGRADED, never a fake 0% red bar.
+                    mpct = (m_ok / total * 100) if total else None
+                    hv = health_display(mpct, total, m_fail)
                     last = st["last_outcome"] or "—"
                     lc = (curses.color_pair(2) if last == "success"
                           else curses.color_pair(4) if last in ("failure", "timeout")
                           else curses.A_DIM)
+                    counts = f" ok:{m_ok:<4} fail:{m_fail:<4}"
+                    if m_abort:
+                        counts += f" abort:{m_abort:<4}"
                     seg_rows[len(lines)] = [
                         ("  ", 0),
-                        (pct_subbar(mpct), tier_color(mpct)),
-                        (f" {pct_label(mpct)} ", tier_color(mpct) | curses.A_BOLD),
-                        (icon, ic),
+                        (pct_subbar(hv.bar_pct), hv.bar_color),
+                        (f" {pct_label(hv.bar_pct)} ", hv.bar_color | curses.A_BOLD),
+                        (hv.icon, hv.text_color),
                         (f" {m_short:<24}", 0),
-                        (f" ok:{st['ok']:<4} fail:{st['fail']:<4}", 0),
+                        (counts, 0),
                         (f"  last: {last}", lc),
                     ]
                     lines.append("")  # placeholder
                 else:
+                    # Zero traffic for this model — configured but not yet
+                    # exercised: full green bar + NO DATA YET.
+                    hv = health_display(None, 0, 0)
                     seg_rows[len(lines)] = [
                         ("  ", 0),
-                        (pct_subbar(None), curses.A_DIM),
-                        (f" {pct_label(None)} ", curses.A_DIM),
-                        ("◎", curses.A_DIM),
+                        (pct_subbar(hv.bar_pct), hv.bar_color),
+                        (f" {pct_label(hv.bar_pct)} ", hv.bar_color),
+                        (hv.icon, hv.text_color),
                         (f" {m_short:<24}", curses.A_DIM),
                         ("  no results yet", curses.A_DIM),
                     ]

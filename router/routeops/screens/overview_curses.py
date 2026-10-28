@@ -12,6 +12,7 @@ from routeops.reconstruction import ReconstructedRequest, RequestStatus
 from routeops.tui.bars import (
     pct_bar, pct_subbar, pct_label, tier_color, tier_icon, hardfail_icon,
     provider_rollup, provider_routes, cooldown_text, BAR_CELLS,
+    verdict, status_from_verdict, health_display,
 )
 
 
@@ -139,14 +140,27 @@ class OverviewScreen:
         else:
             time_str = "--:--:--"
 
-        left = "● LIVE   Router: ONLINE"
-        if self.app_state.process_info:
+        # Router status is derived from the observed process identity, not a literal
+        proc = self.app_state.process_info
+        router_online = bool(proc and proc.identity == "PRODUCTION")
+        if router_online:
+            left = "● LIVE   Router: ONLINE"
+        elif proc:
+            left = f"● LIVE   Router: {proc.identity}"
+        else:
+            left = "● LIVE   Router: NOT OBSERVED"
+
+        if proc:
             left += f"   PID: {self.app_state.process_info.pid}"
             if self.app_state.process_info.uptime_display != "--":
                 left += f"   Up: {self.app_state.process_info.uptime_display}"
             else:
                 left += f"   Up: --"
-        left += f"   Port: 8643"
+        # Port comes from config.json (app_state.router_port), never a literal
+        left += f"   Port: {self.app_state.router_port}"
+
+        if self.app_state.paused:
+            left += "   ⏸ PAUSED"
 
         if 0 <= y < rows:
             write(y, 0, left, curses.color_pair(2) | curses.A_BOLD)
@@ -252,16 +266,18 @@ class OverviewScreen:
                 continue
 
             # --- Model header: name + aggregate bar + pct + total requests
-            total_ok = total_fail = 0
+            total_ok = total_fail = total_abort = 0
             any_prov_healthy = False
             for prov in providers:
                 st = mh.get((prov, model))
                 if st:
-                    total_ok += st["ok"]
-                    total_fail += st["fail"]
-            total = total_ok + total_fail
-            # Zero-traffic model: show 100% if any serving provider is healthy
-            if total == 0:
+                    total_ok += st.get("ok", 0)
+                    total_fail += st.get("fail", 0)
+                    total_abort += st.get("abort", 0)
+            total = total_ok + total_fail + total_abort
+            n_obs = total_ok + total_fail
+            # Zero-traffic model: fall back to the router's own verdict
+            if n_obs == 0:
                 for prov in providers:
                     pm = self.app_state.providers.get(prov)
                     if pm and pm.health and pm.health.healthy and not pm.health.hard_failed:
@@ -269,15 +285,20 @@ class OverviewScreen:
                         break
                 pct = 100.0 if any_prov_healthy else None
             else:
-                pct = (total_ok / total * 100)
+                pct = (total_ok / n_obs * 100)
+            # ONE shared verdict for the model header — bar, icon and status
+            # all come from the same evidence.
+            hv = health_display(pct, n_obs, total_fail)
             m_short = model.split("/")[-1][:NAME_W - 1]
-            icon, ic = tier_icon(pct)
+            req_note = f"  ·  {total} req"
+            if total_abort:
+                req_note += f" ({total_abort} aborted)"
             lines.append([
                 (f"{m_short:<{NAME_W}}", curses.A_BOLD),
-                (pct_bar(pct), tier_color(pct)),
-                (f" {pct_label(pct)}", tier_color(pct) | curses.A_BOLD),
-                (f" {icon}", ic),
-                (f"  ·  {total} req", DIM),
+                (pct_bar(hv.bar_pct), hv.bar_color),
+                (f" {pct_label(hv.bar_pct)}", hv.bar_color | curses.A_BOLD),
+                (f" {hv.icon}", hv.text_color),
+                (req_note, DIM),
             ])
 
             # --- Provider rows: aligned under the model header
@@ -290,39 +311,38 @@ class OverviewScreen:
                     prov_healthy = pm.health.healthy and not pm.health.hard_failed
                 
                 if st:
-                    p_total = st["ok"] + st["fail"]
-                    p_pct = (st["ok"] / p_total * 100) if p_total else None
-                    c = tier_color(p_pct)
-                    icon, ic = tier_icon(p_pct)
+                    p_ok = st.get("ok", 0)
+                    p_fail = st.get("fail", 0)
+                    p_abort = st.get("abort", 0)
+                    p_total = p_ok + p_fail
+                    p_pct = (p_ok / p_total * 100) if p_total else None
+                    # ONE shared verdict — the same tier scale as the parent.
+                    hv = health_display(p_pct, p_total, p_fail)
                     last = st["last_outcome"] or "—"
                     lc = GREEN if last == "success" else (RED if last in ("failure", "timeout") else DIM)
+                    counts = f"  {p_ok:>3} ok  {p_fail:>3} fail"
+                    if p_abort:
+                        counts += f"  {p_abort:>3} abort"
                     lines.append([
                         (f"  {prov:<{NAME_W - 2}}", WHITE),
-                        (pct_subbar(p_pct), c),
-                        (f" {pct_label(p_pct)}", c),
-                        (f" {icon}", ic),
-                        (f"  {st['ok']:>3} ok  {st['fail']:>3} fail", WHITE),
+                        (pct_subbar(hv.bar_pct), hv.bar_color),
+                        (f" {pct_label(hv.bar_pct)}", hv.bar_color),
+                        (f" {hv.icon}", hv.text_color),
+                        (counts, WHITE),
                         (f"  {last}", lc),
                     ])
                 else:
-                    # Zero traffic for this provider/model: if healthy per /health, show 100% (green)
-                    # Otherwise show empty (no data)
-                    if prov_healthy:
-                        lines.append([
-                            (f"  {prov:<{NAME_W - 2}}", WHITE),
-                            (pct_subbar(100.0), GREEN),
-                            (f" {pct_label(100.0)}", GREEN),
-                            (" ●", GREEN),
-                            (f"  0 ok  0 fail", DIM),
-                            (f"  —", DIM),
-                        ])
-                    else:
-                        lines.append([
-                            (f"  {prov:<{NAME_W - 2}}", DIM),
-                            (pct_subbar(None), DIM),
-                            (f" {pct_label(None)}", DIM),
-                            (" ◎", DIM),
-                        (f"   —  no results yet", DIM),
+                    # Zero traffic for this provider/model — configured and
+                    # routed but not yet exercised. Full green bar + NO DATA
+                    # YET, never an empty/red bar that reads as dead.
+                    hv = health_display(None, 0, 0)
+                    lines.append([
+                        (f"  {prov:<{NAME_W - 2}}", WHITE),
+                        (pct_subbar(hv.bar_pct), hv.bar_color),
+                        (f" {pct_label(hv.bar_pct)}", hv.bar_color),
+                        (f" {hv.icon}", hv.text_color),
+                        (f"  0 ok  0 fail", DIM),
+                        (f"  —", DIM),
                     ])
             lines.append("")  # gap between models
 
@@ -347,6 +367,7 @@ class OverviewScreen:
             outcome = req.get('outcome', 'unknown')
             status_code = req.get('status_code')
             latency = req.get('total_latency_ms', req.get('latency_ms'))
+            ts = req.get('last_timestamp') or req.get('first_timestamp')
         else:
             preference = getattr(req, 'preference', 'unknown') or 'unknown'
             fallback = getattr(req, 'fallback_chain', [])
@@ -354,6 +375,12 @@ class OverviewScreen:
             outcome = getattr(req, 'outcome', 'unknown')
             status_code = getattr(req, 'status_code', None)
             latency = getattr(req, 'total_latency_ms', None)
+            ts = getattr(req, 'last_timestamp', None) or getattr(req, 'first_timestamp', None)
+
+        # EXACT time of the completed request — the JSONL timestamp, not a
+        # generic "now". A last-completed box without a clock is useless.
+        if ts:
+            lines.append(f"Time: {self._format_event_ts(ts)}")
 
         lines.append(f"Preference: {preference}")
 
@@ -451,7 +478,14 @@ class OverviewScreen:
                 continue
 
             # Real success % from JSONL rollup — same meaning as MODEL HEALTH bars
-            pct, _ok, _fail = provider_rollup(self.app_state, name)
+            pct, _ok, _fail, _abort = provider_rollup(self.app_state, name)
+            n_obs = (_ok + _fail)
+            router_healthy = health.healthy and not health.hard_failed
+
+            # ONE shared verdict drives the bar, the icon AND the status word,
+            # so a row can never read '0.0% ○ HEALTHY'.
+            in_cd = not health.healthy and not health.hard_failed
+            hv = health_display(pct, n_obs, _fail, in_cd)
 
             if health.hard_failed:
                 hard_failed += 1
@@ -464,27 +498,55 @@ class OverviewScreen:
                 status = "COOLDOWN"
                 icon, icon_c = ("◐", curses.color_pair(3))
                 status_color = curses.color_pair(3)
-                bar_c = tier_color(pct)
+                bar_c = hv.bar_color
             else:
                 healthy += 1
-                status = "HEALTHY"
-                icon, icon_c = tier_icon(pct)
-                status_color = curses.color_pair(2)
-                bar_c = tier_color(pct)
+                status = hv.status
+                icon, icon_c = hv.icon, hv.text_color
+                status_color = hv.text_color
+                bar_c = hv.bar_color
 
             lines.append([
                 (f"{name:<12}  ", curses.A_BOLD),
-                (pct_bar(pct), bar_c),
-                (f" {pct_label(pct)} ", bar_c | curses.A_BOLD),
+                (pct_bar(hv.bar_pct), bar_c),
+                (f" {pct_label(hv.bar_pct)} ", bar_c | curses.A_BOLD),
                 (f"{icon} ", icon_c),
-                (f"{status:<11} ", status_color),
+                (f"{status:<12} ", status_color),
                 (f" fails:{failures:<2}  {cd:>7}  models:{models:<2}  keys:{keys}", 0),
             ])
 
         total = healthy + degraded + hard_failed
-        summary = f"Total: {total}  OK: {healthy}"
+        # The summary must count what the ROWS show. A row rendered DEGRADED
+        # (or FAILING) cannot be counted as OK, or the summary contradicts
+        # the rows directly above it.
+        n_healthy = n_degrading = n_degraded = n_unhealthy = 0
+        for name in sorted(self.app_state.providers.keys()):
+            if provider_routes(self.app_state, name) == 0:
+                continue
+            pm = self.app_state.providers[name]
+            h = pm.health
+            if h.hard_failed or not h.healthy:
+                continue
+            pct, ok_t, fail_t, _ab = provider_rollup(self.app_state, name)
+            v = verdict(pct, ok_t + fail_t)
+            if v == "healthy":
+                n_healthy += 1
+            elif v == "degrading":
+                n_degrading += 1
+            elif v == "degraded":
+                n_degraded += 1
+            else:
+                n_unhealthy += 1
+
+        summary = f"Total: {total}  OK: {n_healthy}"
+        if n_degrading:
+            summary += f"  Degrading: {n_degrading}"
+        if n_degraded:
+            summary += f"  Degraded: {n_degraded}"
+        if n_unhealthy:
+            summary += f"  Unhealthy: {n_unhealthy}"
         if degraded:
-            summary += f"  Degraded: {degraded}"
+            summary += f"  Cooldown: {degraded}"
         if hard_failed:
             summary += f"  Hard-failed: {hard_failed}"
         if unrouted:
@@ -509,6 +571,24 @@ class OverviewScreen:
             else:
                 out.append(item[:w])
         return out
+
+    @staticmethod
+    def _format_event_ts(ts) -> str:
+        """Format a JSONL timestamp as 'HH:MM:SS' in LOCAL time.
+
+        Accepts either a datetime (EventModel.timestamp) or the raw ISO
+        string the router writes ('2026-10-28T07:39:12.472406611Z').
+        """
+        if ts is None:
+            return "—"
+        if hasattr(ts, "strftime"):
+            return ts.strftime("%H:%M:%S")
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            return dt.astimezone().strftime("%H:%M:%S")
+        except (ValueError, AttributeError, TypeError):
+            return str(ts)
 
     def _build_live_events_lines(self, width: int) -> list:
         """Build live events lines showing full fallback chain (colored)."""
@@ -576,15 +656,48 @@ class OverviewScreen:
                         (f"{provider} / {model}     ", WHITE),
                         (f"{status} OK", GREEN),
                     ]
-            elif event.event_type == "route_fallback":
-                seg = [
-                    (f"{ts}  ", CYAN),
-                    (f"→ fallback {provider}", YELLOW),
-                ]
             elif event.event_type == "route_cooldown":
                 seg = [
                     (f"{ts}  ", CYAN),
-                    (f"→ cooldown {event.cooldown_seconds}s", YELLOW),
+                    (f"{provider} / {model or '—'}     ", WHITE),
+                    (f"→ cooldown {event.cooldown_seconds or '?'}s", YELLOW),
+                ]
+            elif event.event_type == "route_quarantined":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider} / {model or '—'}     ", WHITE),
+                    ("✗ QUARANTINED (permanent)", RED),
+                ]
+            elif event.event_type == "route_recovered":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider} / {model or '—'}     ", WHITE),
+                    ("✓ RECOVERED", GREEN),
+                ]
+            elif event.event_type == "preference_fallback":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"→ pref {event.from_preference or '?'} → {event.to_preference or '?'}     ", WHITE),
+                    ("PREFERENCE FALLBACK", YELLOW),
+                ]
+            elif event.event_type == "stream_result":
+                if error:
+                    seg = [
+                        (f"{ts}  ", CYAN),
+                        (f"{provider or '—'} / {model or '—'}     ", WHITE),
+                        (f"STREAM ERROR {error}", RED),
+                    ]
+                else:
+                    seg = [
+                        (f"{ts}  ", CYAN),
+                        (f"{provider or '—'} / {model or '—'}     ", WHITE),
+                        (f"STREAM {status or outcome or 'OK'}", GREEN),
+                    ]
+            elif event.event_type == "truncation_detected":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} / {model or '—'}     ", WHITE),
+                    ("⚠ TRUNCATION DETECTED", YELLOW),
                 ]
             elif event.event_type == "provider_health":
                 color = GREEN if outcome in ("healthy", "recovered") else RED
@@ -623,11 +736,10 @@ class OverviewScreen:
         w = width - 4
 
         proc = self.app_state.process_info
+        # Uptime indicator is derived from the observed process identity.
         if proc and proc.identity == "PRODUCTION":
-            router_status = "● ONLINE"
             uptime_indicator = "✓ UP"
         else:
-            router_status = "● OFFLINE"
             uptime_indicator = "✗ DOWN"
 
         # Real memory from /proc/meminfo (cheap, no subprocess)
@@ -672,9 +784,24 @@ class OverviewScreen:
         disk_bar, disk_c = usage_bar(disk_pct)
         disk_lbl = f"{disk_pct}%" if disk_pct is not None else "—"
 
-        # Line 1 as segments: Router + Hermes + Memory bar + Disk bar
+        # Line 1 as segments: Hermes + Memory bar + Disk bar
+        # The Router status is NOT repeated here — the header already reports
+        # it (LIVE / PID / uptime / port) from the observed process. A second
+        # copy in the SYSTEM box was a hardcoded literal that could disagree
+        # with the header.
+        # Hermes status is PROBED (process worker collects live Hermes PIDs) —
+        # it is never a hardcoded "RUNNING" literal.
+        hermes_pids = getattr(self.app_state, "_hermes_pids", []) or []
+        if hermes_pids:
+            hermes_str = f"Hermes ● RUNNING ({len(hermes_pids)} proc)"
+            hermes_attr = curses.color_pair(2)
+        else:
+            hermes_str = "Hermes ○ NOT OBSERVED"
+            hermes_attr = curses.color_pair(3)
+
         lines.append([
-            (f"Router {router_status}    Hermes ● RUNNING    ", 0),
+            (hermes_str, hermes_attr),
+            ("    ", 0),
             ("Memory ", 0), (mem_bar, mem_c), (f" {mem_lbl}", mem_c),
             ("   Disk ", 0), (disk_bar, disk_c), (f" {disk_lbl}", disk_c),
         ])

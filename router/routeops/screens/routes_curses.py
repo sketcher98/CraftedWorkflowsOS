@@ -8,7 +8,10 @@ from typing import List, Dict, Tuple, Optional
 from routeops.state import AppState
 from routeops.models.provider import ProviderHealth
 from routeops.screens.route_editor import RouteEditor
-from routeops.tui.bars import TIER_GREEN_PCT, TIER_YELLOW_PCT
+from routeops.tui.bars import (
+    TIER_GREEN_PCT, TIER_YELLOW_PCT, tier_icon, tier_color,
+    health_display, verdict,
+)
 
 
 class RoutesScreen:
@@ -694,17 +697,16 @@ class RoutesScreen:
                 # 1) JSONL per-(provider, model) results — ground truth when present
                 st = mh.get((p, model))
                 if st:
-                    total = st["ok"] + st["fail"]
-                    pct = (st["ok"] / total * 100) if total else 0
-                    if pct >= TIER_GREEN_PCT:
-                        segs.append((f"  {'●':<{col_w}}", curses.color_pair(2) | curses.A_BOLD))
-                    elif pct >= TIER_YELLOW_PCT:
-                        segs.append((f"  {'◐':<{col_w}}", curses.color_pair(3) | curses.A_BOLD))
-                    else:
-                        segs.append((f"  {'○':<{col_w}}", curses.color_pair(4) | curses.A_BOLD))
+                    r_ok = st.get("ok", 0)
+                    r_fail = st.get("fail", 0)
+                    total = r_ok + r_fail
+                    pct = (r_ok / total * 100) if total else None
+                    hv = health_display(pct, total, r_fail)
+                    segs.append((f"  {hv.icon:<{col_w}}", hv.text_color | curses.A_BOLD))
                     continue
 
-                # 2) Fall back to provider-level health
+                # 2) Fall back to provider-level health — configured and routed
+                #    but never exercised yet: green ● (not a red ○).
                 health = provider_health.get(p)
                 if health and health.healthy:
                     segs.append((f"  {'●':<{col_w}}", curses.color_pair(2) | curses.A_BOLD))
