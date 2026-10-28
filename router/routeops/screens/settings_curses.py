@@ -31,6 +31,11 @@ class SettingsScreen:
         self.edit_buffer = ""
         self.status_msg = ""
         self.status_timer = 0
+        # Staged-diff gate for Router tab (S1/S8): no write happens on +/-
+        # — values accumulate here, Enter shows a diff, Enter again commits.
+        self.pending_cfg = None
+        self.pending_diff = []
+        self.confirm_diff = False
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(60, width)
@@ -46,6 +51,19 @@ class SettingsScreen:
         """Handle key press. Returns True if handled."""
         if self.status_timer > 0:
             self.status_timer -= 1
+
+        # ---- diff-confirm mode (Router tab staged changes) ----
+        if self.confirm_diff:
+            if key in (curses.KEY_ENTER, 10, 13):
+                self._commit_pending()
+                return True
+            if key in (27, ord('q'), ord('h')):
+                self.confirm_diff = False
+                self.pending_cfg = None
+                self.pending_diff = []
+                self._flash("Staged changes discarded")
+                return True
+            return True
 
         # Tab switching
         if key in (ord("1"), ord("2"), ord("3")):
@@ -78,7 +96,8 @@ class SettingsScreen:
             self.cursor += 1
             return True
 
-        # Editing
+        # Editing — Router tab uses the staged-diff gate (S8): +/- only
+        # STAGES; Enter opens the diff; Enter again commits.
         if key == ord("+") or key == ord("="):
             self._adjust(+1)
             return True
@@ -133,10 +152,11 @@ class SettingsScreen:
             return []
         r = cfg.get("retry", {})
         rows = []
+        # S2: continuation_max was removed from config (B-15) — no dead row.
         for key in ("failure_limit", "cooldown_seconds", "max_cooldown_seconds",
                     "all_failed_wait_seconds", "route_timeout_seconds",
                     "stream_idle_timeout_seconds", "first_event_timeout_seconds",
-                    "hard_failed_wait_seconds", "max_hold_seconds", "continuation_max"):
+                    "hard_failed_wait_seconds", "max_hold_seconds"):
             rows.append({"type": "int", "key": key,
                          "label": key, "value": r.get(key, 0)})
         return rows
@@ -151,7 +171,8 @@ class SettingsScreen:
         if item["type"] == "interval":
             self._adjust_interval(item["key"], delta)
         elif item["type"] == "int":
-            self._adjust_router_int(item["key"], delta)
+            # S1/S8: stage only, never write on a keystroke.
+            self._stage_router_int(item["key"], delta)
         elif item["type"] == "bool":
             pass  # Enter toggles
         elif item["type"] == "cycle":
@@ -171,11 +192,12 @@ class SettingsScreen:
         new = max(0.5, old + delta * (0.5 if old < 5 else 1.0))
         new = min(new, 300.0)
         worker.interval = new
-        POLL_INTERVALS[name] = new  # keep config in sync for display
+        # S5: do NOT mutate the global POLL_INTERVALS dict — the worker is
+        # the source of truth; keep config in sync for display
         self._flash(f"{name}: {old:.1f}s -> {new:.1f}s (live)")
 
-    def _adjust_router_int(self, key: str, delta: int) -> None:
-        """Stage a router config change (commit on Enter)."""
+    def _stage_router_int(self, key: str, delta: int) -> None:
+        """Stage a router config change (commit only through the diff gate)."""
         try:
             cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
         except Exception:
@@ -185,15 +207,27 @@ class SettingsScreen:
         old = r.get(key, 0)
         step = 1 if old < 10 else (5 if old < 60 else 10)
         new = max(0, old + delta * step)
+        # S4: enforce sane minimums for timeout/limit knobs.
+        mins = {"failure_limit": 1, "cooldown_seconds": 1,
+                "hard_failed_wait_seconds": 1, "all_failed_wait_seconds": 1,
+                "route_timeout_seconds": 1, "stream_idle_timeout_seconds": 1,
+                "first_event_timeout_seconds": 1}
+        if key in mins and new < mins[key]:
+            new = mins[key]
+            self._flash(f"{key}: minimum is {mins[key]} (staged)")
         r[key] = new
         cfg["retry"] = r
-        # Write immediately via safe editor
-        self._commit_router_config(cfg, f"{key}: {old} -> {new}")
+        self.pending_cfg = cfg
+        self._flash(f"{key}: {old} -> {new} (staged — Enter to review)")
 
     def _activate(self) -> None:
-        """Enter key: toggle bools, cycle enums."""
+        """Enter key: toggle bools, cycle enums, or open the staged diff."""
         editables = self._get_editable_rows()
         if self.cursor >= len(editables):
+            # S7: a pending staged change can be reviewed even if the cursor
+            # is beyond the current list (e.g. after a tab switch).
+            if self.pending_cfg is not None:
+                self._open_diff_preview()
             return
         item = editables[self.cursor]
         s = self.app_state.settings
@@ -211,16 +245,42 @@ class SettingsScreen:
             next_val = opts[(idx + 1) % len(opts)]
             setattr(s, key, next_val)
             self._flash(f"{item['label']}: {next_val}")
+        elif item["type"] == "int":
+            self._open_diff_preview()
 
-    def _commit_router_config(self, cfg: dict, reason: str) -> None:
-        """Write config via ConfigEditor (backup + validate + atomic)."""
+    def _open_diff_preview(self) -> None:
+        """Build diff lines from staged cfg and enter confirm mode."""
+        if self.pending_cfg is None:
+            return
         try:
             from routeops.adapters.config_editor import ConfigEditor
             editor = ConfigEditor()
-            bak, path = editor.commit(cfg, reason)
-            self._flash(f"Saved: {reason} (bak: {bak.name})")
+            old = editor.load()
+            self.pending_diff = editor.diff_summary(old, self.pending_cfg)
+        except Exception as e:
+            self.pending_diff = [f"diff error: {e}"]
+        self.confirm_diff = True
+        if not any(ln != "no changes" for ln in self.pending_diff):
+            self._flash("No real changes staged")
+            self.confirm_diff = False
+            self.pending_cfg = None
+            self.pending_diff = []
+
+    def _commit_pending(self) -> None:
+        """Commit staged cfg through ConfigEditor (backup+validate+atomic)."""
+        if self.pending_cfg is None:
+            self.confirm_diff = False
+            return
+        try:
+            from routeops.adapters.config_editor import ConfigEditor
+            editor = ConfigEditor()
+            bak, _ = editor.commit(self.pending_cfg, reason="settings router tab")
+            self._flash(f"Saved (bak: {bak.name}) — restart router to apply")
         except Exception as e:
             self._flash(f"SAVE FAILED: {e}")
+        self.confirm_diff = False
+        self.pending_cfg = None
+        self.pending_diff = []
 
     # ---------------------------------------------------------------- render
 
@@ -228,18 +288,26 @@ class SettingsScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
-        # Tab bar
+        # S8: diff-confirm overlay takes the whole screen.
+        if self.confirm_diff:
+            self._render_diff_confirm(term, y, rows, cols)
+            return
+
+        # Tab bar — S6: same adaptive fix as Diagnostics; never clip tabs.
         term.write(y, 0, "SETTINGS  ", curses.A_BOLD | curses.color_pair(1))
         tx = 10
-        for i, name in enumerate(self.tab_names):
+        full_names = self.tab_names
+        compact_names = ["Mon", "Rtr", "Pth"]
+        names = full_names if sum(len(n) + 2 for n in full_names) + 10 + 4 <= cols else compact_names
+        for i, name in enumerate(names):
             marker = f"[{name}]" if i == self.current_tab else f" {name} "
             attr = (curses.color_pair(2) | curses.A_BOLD if i == self.current_tab
                     else curses.A_DIM)
-            if tx + len(marker) > cols - 24:
+            if tx + len(marker) > cols - 2:
                 break
             term.write(y, tx, marker, attr)
             tx += len(marker) + 1
-        hint = "[+/- adjust] [Enter toggle] [1-3 tabs] [Esc back]"
+        hint = "[+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
         term.write(y, max(tx + 2, cols - len(hint) - 1), hint[:cols - tx - 3],
                    curses.color_pair(5) | curses.A_DIM)
         y += 1
@@ -259,6 +327,18 @@ class SettingsScreen:
             self._render_router(term, y, rows, cols)
         else:
             self._render_paths(term, y, rows, cols)
+
+    def _render_diff_confirm(self, term, y: int, rows: int, cols: int) -> None:
+        """Full-screen diff preview for staged router config changes."""
+        w = cols - 4
+        term.write(y, 0, "┌ STAGED CONFIG DIFF ──────────────────────────────────────────────┐"[:cols], curses.color_pair(1))
+        y += 1
+        term.write(y, 2, "Enter=commit · Esc=discard", curses.color_pair(5) | curses.A_DIM)
+        y += 1
+        for ln in self.pending_diff[:rows - y - 2]:
+            term.write(y, 2, f"│ {ln[:w - 4]}", curses.color_pair(2) if ln.startswith("+") else curses.color_pair(4) if ln.startswith("-") else 0)
+            y += 1
+        term.write(y, 0, "└" + "─" * (w - 2) + "┘"[:cols])
 
     def _render_monitor(self, term, y: int, rows: int, cols: int) -> None:
         """Monitor tab: live-editable poll intervals + display toggles."""
@@ -340,8 +420,11 @@ class SettingsScreen:
 
         r = cfg.get("retry", {})
         lines = []
-        lines.append(("RETRY & TIMEOUTS (+/- to adjust, saves immediately)", False))
-        lines.append(("Each change: backup -> validate -> atomic write", False))
+        # S3: 'saves immediately' was misleading — edits are STAGED until
+        # confirmed through the diff gate, and even then only apply after a
+        # router restart.
+        lines.append(("RETRY & TIMEOUTS (+/- stages, Enter reviews diff, Enter commits)", False))
+        lines.append(("Applied only after a router restart (loadConfig runs once at startup)", False))
         lines.append(("", False))
 
         editables = self._router_editables()
@@ -351,8 +434,6 @@ class SettingsScreen:
             hold_note = ""
             if item["key"] == "max_hold_seconds":
                 hold_note = " (hold-and-serve ON)" if (val or 0) > 0 else " (OFF)"
-            elif item["key"] == "continuation_max":
-                hold_note = " (0 = stitching banned)"
             lines.append((f"{marker}{item['label']:<28} {val}{hold_note}", True))
 
         lines.append(("", False))
