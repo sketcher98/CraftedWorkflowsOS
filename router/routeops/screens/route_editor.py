@@ -615,25 +615,6 @@ class RouteEditor:
         except Exception as e:
             return f"SYNC FAILED: {str(e)[:60]}"
 
-    def _auto_restart_router(self, reason: str = ""):
-        """Restart the router automatically after a config commit.
-        Blocks ~5-10s (kill + startr + health check); the TUI shows the
-        result screen meanwhile. Uses the same restart_router() that the
-        manual flow used — no new restart logic."""
-        try:
-            from routeops.adapters.config_editor import restart_router
-            result = restart_router()
-            if result.get("ok"):
-                self.need_restart = False  # restart done — banner cleared
-                self.msg = f"SAVED: {reason}. Router restarted."
-                self.probe_results = [f"✅ router restart: OK"] + (self.probe_results or [])
-            else:
-                # keep banner + manual command as fallback
-                self.msg = f"SAVED: {reason}, but router restart FAILED: {result.get('detail', '')[:80]}"
-                self.probe_results = [f"⚠ router restart failed — manual: kill $(pgrep -f '^\\./router$'); bash ~/bin/startr"] + (self.probe_results or [])
-        except Exception as e:
-            self.msg = f"SAVED: {reason}, but router restart errored: {str(e)[:60]}"
-
     def _commit(self, cfg, reason: str):
         try:
             old = self.ed.load()

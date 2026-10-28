@@ -212,7 +212,12 @@ class OverviewScreen:
             write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
 
     def _render_disclaimer_clipped(self, write, y: int, cols: int) -> None:
-        """Render disclaimer as a full-width colored bar (background fills the line)."""
+        """Render disclaimer as a full-width colored bar (background fills the line).
+        Honored by the show_disclaimers setting — a settings row that nothing
+        reads is a fake control."""
+        enabled = getattr(self.app_state.settings, "show_disclaimers", True)
+        if not enabled:
+            return
         if 0 <= y < cols:
             disc = "ROUTEOPS — external observer, read-only. Source: /health · /v1/models · config.json · router-events.jsonl"
             # Truncate to fit, then pad with spaces so the color fills the WHOLE row

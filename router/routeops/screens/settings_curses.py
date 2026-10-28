@@ -132,16 +132,12 @@ class SettingsScreen:
         for name in ("jsonl", "health", "models", "config", "process"):
             rows.append({"type": "interval", "key": name,
                          "label": f"Poll: {name}", "unit": "s"})
-        # Display
+        # Display — only controls that something actually reads.
+        # (event_density / compact_mode / time_format were fake controls:
+        #  nothing in rendering consumed them — removed.)
         s = self.app_state.settings
-        rows.append({"type": "bool", "key": "auto_refresh",
-                     "label": "Auto-refresh", "value": s.auto_refresh})
         rows.append({"type": "bool", "key": "show_disclaimers",
                      "label": "Disclaimers", "value": s.show_disclaimers})
-        rows.append({"type": "cycle", "key": "event_density",
-                     "label": "Event density",
-                     "options": ["compact", "normal", "verbose"],
-                     "value": s.event_density})
         return rows
 
     def _router_editables(self) -> List[dict]:
