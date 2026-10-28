@@ -22,6 +22,8 @@ class DiagnosticsScreen:
         self._dangling_checked_at = None
         self._metrics_cache = None
         self._metrics_checked_at = None
+        self._full_index = None
+        self._full_last = 0
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(60, width)
@@ -74,19 +76,32 @@ class DiagnosticsScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
-        # Tab bar — active tab highlighted
+        # Tab bar — active tab highlighted.
+        # FIX (D6): previously the hint reserved cols-22 and any tab beyond
+        # that was silently clipped — on narrow terminals the LAST tabs
+        # (Dangling Models, Metrics) were unreachable. Compact labels are
+        # used when the full names cannot all fit.
         tab_str = "DIAGNOSTICS  "
         term.write(y, 0, tab_str, curses.A_BOLD | curses.color_pair(1))
         tx = len(tab_str)
-        for i, name in enumerate(self.tab_names):
+
+        full_names = self.tab_names
+        compact_names = ["Conn", "Lat", "Err", "Bin", "Dang", "Metr"]
+        names = full_names
+        # estimate width: each marker = name + brackets/spacing
+        est = sum(len(n) + 2 for n in names) + len(tab_str) + 4
+        if est > cols:
+            names = compact_names
+
+        for i, name in enumerate(names):
             marker = f"[{name}]" if i == self.current_tab else f" {name} "
             attr = (curses.color_pair(2) | curses.A_BOLD if i == self.current_tab
                     else curses.A_DIM)
-            if tx + len(marker) > cols - 22:
+            if tx + len(marker) > cols - 2:
                 break
             term.write(y, tx, marker, attr)
             tx += len(marker) + 1
-        hint = "[1-5=tabs]  [h/Esc=back]"
+        hint = "[1-6=tabs]  [h/Esc=back]"
         term.write(y, cols - len(hint) - 1, hint, curses.color_pair(5) | curses.A_DIM)
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
@@ -115,8 +130,10 @@ class DiagnosticsScreen:
             stripped = raw.lstrip()
             if stripped.startswith(("✗", "⚠")) or "HARD-FAILED" in raw:
                 attr = curses.color_pair(4) | curses.A_BOLD
-            elif "ALL CLEAR" in raw:
+            elif "ALL CLEAR" in raw or "REACHABLE" in stripped and "UN" not in stripped:
                 attr = curses.color_pair(2) | curses.A_BOLD
+            elif "UNREACHABLE" in stripped or "UNREADABLE" in stripped or "NOT FOUND" in stripped:
+                attr = curses.color_pair(4) | curses.A_BOLD
             elif stripped.startswith("○"):
                 attr = curses.color_pair(3)
             elif stripped.startswith(("REACHABLE", "●")):
@@ -190,18 +207,31 @@ class DiagnosticsScreen:
     def _build_dangling_lines(self, width: int) -> List[str]:
         """Dangling Models tab: hermes refs vs live router catalogs."""
         from datetime import datetime as _dt
+        import threading as _threading
         lines = []
         w = width - 4
         lines.append("DANGLING MODEL SCAN — hermes config refs vs live catalogs")
         lines.append("─" * w)
         lines.append("")
-        # cache for 5 min to avoid hammering on every redraw
+        # cache for 5 min to avoid hammering on every redraw.
+        # D5: the scan probes every provider (up to ~72s worst case) — run it
+        # on a daemon thread so the TUI never freezes; show 'scanning' while
+        # it runs.
         now = _dt.now()
         if (self._dangling_cache is None
                 or self._dangling_checked_at is None
                 or (now - self._dangling_checked_at).total_seconds() > 300):
-            self._dangling_cache = self._run_dangling_scan()
-            self._dangling_checked_at = now
+            if not getattr(self, "_dangling_scanning", False):
+                self._dangling_scanning = True
+                def _do_scan():
+                    try:
+                        self._dangling_cache = self._run_dangling_scan()
+                        self._dangling_checked_at = _dt.now()
+                    finally:
+                        self._dangling_scanning = False
+                _threading.Thread(target=_do_scan, daemon=True).start()
+            lines.append("  ○ SCANNING (provider probes running in background)…")
+            return lines
         result = self._dangling_cache
         checked = self._dangling_checked_at.strftime("%H:%M:%S")
         lines.append(f"  scanned {checked} · {result['n_refs']} refs · "
@@ -290,7 +320,11 @@ class DiagnosticsScreen:
 
         # Check /v1/models endpoint
         models_ok = len(self.app_state._models_cache) > 0
-        lines.append(f"  /v1/models endpoint:  {'● REACHABLE' if models_ok else '● UNREACHABLE'}")
+        # D10: flag stale-cache reads instead of reporting REACHABLE blindly.
+        models_note = ""
+        if models_ok:
+            models_note = "  (from cache — may be stale)"
+        lines.append(f"  /v1/models endpoint:  {'● REACHABLE' if models_ok else '● UNREACHABLE'}{models_note}")
 
         # Check config.json
         config_ok = self.app_state.config is not None
@@ -326,11 +360,39 @@ class DiagnosticsScreen:
             if health.hard_failed:
                 status = "HARD-FAILED"
             lines.append(f"  {name:<12}: {status}  (failures={health.failures}, models={health.catalog_models})")
+            # D11: surface per-cell routes[] from the router's B-7 health.
+            cells = getattr(health, "cells", ()) or ()
+            for cell in cells:
+                c_short = cell.model.split("/")[-1][:28]
+                c_stat = "OK" if cell.healthy else ("HARD-FAILED" if cell.hard_failed else "COOLDOWN/UNHEALTHY")
+                lines.append(f"      {c_short:<30} {c_stat}  fail={cell.failures}")
 
         return [line[:w] for line in lines]
 
+    # ------------------------------------------------- full-file index
+
+    def _full_results(self) -> List:
+        """Body route_result events from the FULL-FILE index (D2).
+
+        Replaces the 500-event memory window so diagnostics totals are true
+        totals, not a shrinking snapshot."""
+        from routeops.adapters.history_index import HistoryIndex
+        from routeops.config import ROUTER_EVENTS_JSONL
+        if getattr(self, "_full_index", None) is None:
+            self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
+            self._full_index.refresh()
+        elif getattr(self, "_full_last", 0) < __import__("time").time() - 5:
+            self._full_index.refresh()
+        self._full_last = __import__("time").time()
+        return [e for e in self._full_index.query("results")
+                if e.event_type == "route_result"]
+
     def _build_latency_lines(self, width: int) -> List[str]:
-        """Build latency drill-down lines."""
+        """Build latency drill-down lines.
+
+        D2/D3: sourced from the FULL-FILE index (not the 500-event memory
+        window) and only SUCCESSFUL route_results — failures/timeouts pollute
+        latency otherwise."""
         lines = []
         w = width - 4
 
@@ -338,10 +400,10 @@ class DiagnosticsScreen:
         lines.append("─" * w)
         lines.append("")
 
-        # Collect latency data from events
+        # Collect latency data from the full-file index
         latencies = []
-        for event in self.app_state.recent_events:
-            if event.event_type == "route_result" and event.latency_ms:
+        for event in self._full_results():
+            if event.outcome == "success" and event.latency_ms:
                 latencies.append({
                     'provider': event.provider,
                     'model': event.model,
@@ -391,7 +453,10 @@ class DiagnosticsScreen:
         return [line[:w] for line in lines]
 
     def _build_errors_lines(self, width: int) -> List[str]:
-        """Build error analysis lines."""
+        """Build error analysis lines.
+
+        D2/D4: full-file index (not the 500-event window); client_abort is
+        explicitly excluded — it is neutral, not an error."""
         lines = []
         w = width - 4
 
@@ -404,8 +469,8 @@ class DiagnosticsScreen:
         fallback_events = []
         cooldown_events = []
         
-        for event in self.app_state.recent_events:
-            if event.event_type == "route_result" and event.error:
+        for event in self._full_results():
+            if event.error and event.outcome not in ("client_abort",):
                 errors.append({
                     'provider': event.provider,
                     'model': event.model,
@@ -413,17 +478,18 @@ class DiagnosticsScreen:
                     'status': event.status,
                     'timestamp': event.timestamp
                 })
-            elif event.event_type == "preference_fallback":
-                fallback_events.append({
-                    'provider': event.provider,
-                    'from_pref': event.from_preference,
-                    'to_pref': event.to_preference,
-                    'timestamp': event.timestamp
-                })
             elif event.event_type == "route_cooldown":
                 cooldown_events.append({
                     'provider': event.provider,
                     'cooldown': event.cooldown_seconds,
+                    'timestamp': event.timestamp
+                })
+        for event in self._full_index.query("fallbacks"):
+            if event.event_type == "preference_fallback":
+                fallback_events.append({
+                    'provider': event.provider,
+                    'from_pref': event.from_preference,
+                    'to_pref': event.to_preference,
                     'timestamp': event.timestamp
                 })
 
@@ -450,7 +516,8 @@ class DiagnosticsScreen:
             lines.append("")
             for fb in fallback_events[-5:]:
                 ts = fb['timestamp'].strftime("%H:%M:%S") if fb['timestamp'] else "--:--:--"
-                lines.append(f"  {ts}  {fb['from_pref'] or '?'} → {fb['to_pref'] or '?'}  via {fb['provider']}")
+                # D7: preference_fallback has no provider — show request-era info.
+                lines.append(f"  {ts}  {fb['from_pref'] or '?'} → {fb['to_pref'] or '?'}")
 
         # Recent cooldowns
         if cooldown_events:
@@ -509,8 +576,9 @@ class DiagnosticsScreen:
         lines.append("─" * w)
         lines.append("")
 
-        expected_exe = "/data/data/com.termux/files/home/CraftedWorkflowsOS/router/router"
-        expected_cwd = "/data/data/com.termux/files/home/CraftedWorkflowsOS/router"
+        from routeops.adapters.process_inspect import ProcessInspectAdapter
+        expected_exe = str(ProcessInspectAdapter.PRODUCTION_EXE)
+        expected_cwd = str(ProcessInspectAdapter.PRODUCTION_CWD)
 
         exe_match = proc.exe == expected_exe
         cwd_match = proc.cwd == expected_cwd
@@ -609,10 +677,38 @@ class DiagnosticsScreen:
                 lines.append(f"    {labels} = {value}")
             lines.append("")
 
-        # Latency histogram
-        if "router_request_duration_seconds" in metrics:
-            lines.append("  router_request_duration_seconds (histogram):")
-            lines.append("    (see Latency tab for p50/p90/p99)")
+        # Latency histogram — D9: derive real p50/p90/p99 from the cumulative
+        # buckets instead of just pointing at the Latency tab.
+        if "router_request_duration_seconds_bucket" in metrics:
+            # histogram buckets: router_request_duration_seconds_bucket{provider=...,model=...,le="0.1"} N
+            buckets = []
+            for labels, value in metrics["router_request_duration_seconds_bucket"]:
+                le = None
+                for part in labels.split(","):
+                    if part.strip().startswith('le="'):
+                        le = part.strip()[4:-1]
+                if le is not None and le != "+Inf":
+                    try:
+                        buckets.append((float(le), float(value)))
+                    except ValueError:
+                        pass
+            count_val = 0.0
+            for labels, value in metrics.get("router_request_duration_seconds_count", []):
+                try:
+                    count_val += float(value)
+                except ValueError:
+                    pass
+            if buckets and count_val > 0:
+                buckets.sort()
+                lines.append(f"  histogram count: {count_val:.0f}")
+                pct = {}
+                for p in (50, 90, 99):
+                    target = count_val * p / 100.0
+                    pct[p] = next((le for le, cum in buckets if cum >= target), buckets[-1][0])
+                lines.append(f"  histogram p50={pct[50]*1000:.0f}ms  p90={pct[90]*1000:.0f}ms  p99={pct[99]*1000:.0f}ms")
+                lines.append("")
+        else:
+            lines.append("  router_request_duration_seconds (histogram): no bucket series found")
             lines.append("")
 
         # System metrics
