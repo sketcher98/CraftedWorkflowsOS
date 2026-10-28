@@ -177,7 +177,12 @@ class KeyManagementScreen:
         try:
             from routeops.adapters.config_editor import ConfigEditor
             ce = ConfigEditor()
-            self.app_state.config = ce.load_config(self.app_state.settings.router_config_path)
+            # Audit catch: ConfigEditor has load(), not load_config() — the
+            # refresh key was calling a method that doesn't exist and always
+            # failed with AttributeError.
+            data = ce.load()
+            from routeops.adapters.config_read import ConfigAdapter
+            self.app_state.config = ConfigAdapter(str(ce.config_path))._parse_config(data)
             # Update provider configs
             for pm in self.app_state.providers.values():
                 for pref in self.app_state.config.preferences:

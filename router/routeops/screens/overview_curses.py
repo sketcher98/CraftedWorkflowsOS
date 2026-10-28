@@ -389,11 +389,11 @@ class OverviewScreen:
             chain_parts = []
             for i, prov in enumerate(fallback):
                 chain_parts.append(prov)
-            chain = " ── 429 ──→ ".join(chain_parts) if len(fallback) > 1 else fallback[0]
-            # FIX: req is always a DICT here (last_request from
-            # get_last_completed_request) — the old hasattr guard never fired
-            # and every chain hardcoded 429. Build from real per-attempt
-            # statuses when they exist.
+            # Audit catch: the literal '── 429 ──→' was a fabricated status —
+            # do NOT claim a status we don't have. Neutral arrow when real
+            # per-attempt statuses are unavailable.
+            chain = " ──→ ".join(chain_parts) if len(fallback) > 1 else fallback[0]
+            # Build from real per-attempt statuses when they exist.
             attempts = req.get('attempts') if isinstance(req, dict) else getattr(req, 'attempts', None)
             if attempts:
                 chain = self._build_chain_from_attempts(attempts)
