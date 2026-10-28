@@ -49,6 +49,15 @@ class EventModel:
     to_preference: Optional[str] = None
     context: str = "request"
     key_env: Optional[str] = None
+    # GAP-001..005 fields
+    requested_model: Optional[str] = None
+    error_kind: Optional[str] = None
+    build_id: Optional[str] = None
+    first_chunk_latency_ms: Optional[int] = None
+    fallback_depth: Optional[int] = None
+    fallback_chain: tuple = ()
+    retry_after_seconds: Optional[int] = None
+    key_id: Optional[str] = None
 
     @classmethod
     def from_json(cls, data: dict) -> 'EventModel':
@@ -77,6 +86,14 @@ class EventModel:
             to_preference=data.get('to_preference'),
             context=data.get('context', 'request'),
             key_env=data.get('key_env'),
+            requested_model=data.get('requested_model'),
+            error_kind=data.get('error_kind'),
+            build_id=data.get('build_id'),
+            first_chunk_latency_ms=data.get('first_chunk_latency_ms'),
+            fallback_depth=data.get('fallback_depth'),
+            fallback_chain=tuple(data.get('fallback_chain') or ()),
+            retry_after_seconds=data.get('retry_after_seconds'),
+            key_id=data.get('key_id'),
         )
 
 

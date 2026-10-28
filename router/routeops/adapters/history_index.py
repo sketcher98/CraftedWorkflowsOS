@@ -25,19 +25,18 @@ from routeops.models.request import EventModel
 
 
 # Event type → filter bucket. Mirrors the History screen's filter names.
-# Includes the B-3/B-4/B-5 telemetry types: route_skipped (skips),
-# request_started / request_exhausted (lifecycle), client_abort (no-penalty
-# cancellation — grouped with results so it is visible, and with errors
-# only when an error string is actually present).
-FILTER_ATTEMPTS = {"route_attempt", "request_started"}
+# Includes the B-3..B-7 + GAP-001..007 telemetry types.
+FILTER_ATTEMPTS = {"route_attempt", "request_started", "route_committed"}
 FILTER_RESULTS = {"route_result", "stream_result", "client_abort",
-                 "request_exhausted"}
+                 "request_exhausted", "catalog_refreshed"}
 FILTER_FALLBACKS = {"preference_fallback", "route_cooldown",
                     "route_quarantined", "route_recovered"}
 FILTER_COOLDOWNS = {"route_cooldown"}
 FILTER_HEALTH = {"provider_health", "route_recovered", "route_quarantined",
-                 "route_skipped"}
-FILTER_ERRORS = {"route_result", "stream_result", "client_abort"}
+                 "route_skipped", "health_transition",
+                 "credential_rotation_signal", "catalog_skip"}
+FILTER_ERRORS = {"route_result", "stream_result", "client_abort",
+                 "catalog_skip", "credential_rotation_signal"}
 
 
 class HistoryIndex:

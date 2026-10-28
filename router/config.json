@@ -67,16 +67,6 @@
           "model": "z-ai/glm-5.3-flash"
         }
       ]
-    },
-    {
-      "name": "deepseek-ai/deepseek-v4.1-flash",
-      "context_window": 1048576,
-      "routes": [
-        {
-          "provider": "nvidia",
-          "model": "deepseek-ai/deepseek-v4.1-flash"
-        }
-      ]
     }
   ],
   "providers": [

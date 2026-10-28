@@ -2,8 +2,8 @@
   {
     "id": "N01",
     "name": "no wrong model substitution",
-    "status": "PASS",
-    "detail": "3 events, models=['moonshotai/kimi-k3']"
+    "status": "FAIL",
+    "detail": "served models outside request: {'5'}"
   },
   {
     "id": "N02",

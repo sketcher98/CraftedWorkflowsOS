@@ -725,6 +725,39 @@ class OverviewScreen:
                     (f"{provider or '—'} / {model or '—'}     ", WHITE),
                     ("CLIENT ABORT (no penalty)", YELLOW),
                 ]
+            elif event.event_type == "route_committed":
+                ttfb = getattr(event, "first_chunk_latency_ms", None) or ""
+                ttfb_s = f" ttfb={ttfb}ms" if ttfb else ""
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} / {model or '—'}     ", WHITE),
+                    (f"COMMITTED{ttfb_s}", GREEN),
+                ]
+            elif event.event_type == "catalog_refreshed":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} catalog: ", WHITE),
+                    (f"{model or '?'} models", GREEN),
+                ]
+            elif event.event_type == "catalog_skip":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} catalog: ", WHITE),
+                    (f"SKIP ({outcome or '?'})", RED),
+                ]
+            elif event.event_type == "credential_rotation_signal":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} key {event.key_env or '?'}: ", WHITE),
+                    ("ROTATION SIGNAL", RED),
+                ]
+            elif event.event_type == "health_transition":
+                tcolor = RED if outcome in ("healthy_to_cooldown", "unhealthy_to_hardfailed") else GREEN
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} / {model or '—'}: ", WHITE),
+                    (outcome, tcolor),
+                ]
             elif event.event_type == "provider_health":
                 color = GREEN if outcome in ("healthy", "recovered") else RED
                 seg = [
