@@ -84,7 +84,7 @@ class HistoryScreen:
                 self.detail_scroll = 0
             return True
 
-        if key in (27, ord('h'), ord('q')):  # Esc, h, q
+        if key in (27, ord('q')):  # Esc, q — h is now the global History key
             if self.show_detail:
                 self.show_detail = False
                 self.detail_scroll = 0
@@ -264,6 +264,26 @@ class HistoryScreen:
         # Preference fallback info
         if event.from_preference and event.to_preference:
             lines.append(f"Preference Fallback: {event.from_preference} → {event.to_preference}")
+
+        # H1: surface the GAP telemetry fields the router now emits.
+        if event.requested_model:
+            lines.append(f"Requested Model: {event.requested_model}")
+        if event.error_kind:
+            lines.append(f"Error Kind: {event.error_kind}")
+        if event.build_id:
+            lines.append(f"Build: {event.build_id}")
+        if event.first_chunk_latency_ms:
+            lines.append(f"First-chunk (TTFB): {event.first_chunk_latency_ms}ms")
+        if event.fallback_depth is not None:
+            lines.append(f"Fallback Depth: {event.fallback_depth}")
+        if event.fallback_chain:
+            lines.append(f"Fallback Chain: {' → '.join(event.fallback_chain)}")
+        if event.retry_after_seconds:
+            lines.append(f"Retry-After (429): {event.retry_after_seconds}s")
+        if event.key_env:
+            lines.append(f"Key Env: {event.key_env}")
+        if event.key_id:
+            lines.append(f"Key ID: {event.key_id}")
 
         return [line[:w] for line in lines]
 

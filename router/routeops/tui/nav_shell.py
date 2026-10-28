@@ -45,7 +45,8 @@ class NavigationShell:
             # Direct navigation
             ord('p'): ScreenType.PROVIDERS,
             ord('r'): ScreenType.ROUTES,
-            ord('y'): ScreenType.HISTORY,
+            ord('y'): ScreenType.HISTORY,   # legacy alias
+            ord('h'): ScreenType.HISTORY,   # canonical (h = history)
             ord('d'): ScreenType.DIAGNOSTICS,
             ord('s'): ScreenType.SETTINGS,
             # Global
