@@ -74,6 +74,11 @@ class RoutesScreen:
             self.editor.test_current_route(
                 self.current_pref_index, self.editor.route_idx)
             return True
+        if key == ord('s'):
+            # B-6: toggle routing strategy (configured order <-> LKGP) via
+            # the same staged-diff gate as every other config edit.
+            self.editor.stage_strategy_toggle()
+            return True
 
         # --- Pending preference moves: Enter=save (diff gate), Esc=cancel ---
         if self.editor.pending is not None and self.editor.mode == "closed":

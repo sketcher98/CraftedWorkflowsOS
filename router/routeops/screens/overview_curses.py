@@ -699,6 +699,32 @@ class OverviewScreen:
                     (f"{provider or '—'} / {model or '—'}     ", WHITE),
                     ("⚠ TRUNCATION DETECTED", YELLOW),
                 ]
+            elif event.event_type == "route_skipped":
+                reason = outcome or "?"
+                rcolor = YELLOW if reason in ("cooldown", "unhealthy") else RED
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} / {model or '—'}     ", WHITE),
+                    (f"SKIP ({reason})", rcolor),
+                ]
+            elif event.event_type == "request_started":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"req {event.request_id or '?'} → {event.preference or '?'}    ", WHITE),
+                    ("STARTED", GREEN),
+                ]
+            elif event.event_type == "request_exhausted":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"req {event.request_id or '?'} → {event.preference or '?'}    ", WHITE),
+                    ("EXHAUSTED (503)", RED),
+                ]
+            elif event.event_type == "client_abort":
+                seg = [
+                    (f"{ts}  ", CYAN),
+                    (f"{provider or '—'} / {model or '—'}     ", WHITE),
+                    ("CLIENT ABORT (no penalty)", YELLOW),
+                ]
             elif event.event_type == "provider_health":
                 color = GREEN if outcome in ("healthy", "recovered") else RED
                 seg = [

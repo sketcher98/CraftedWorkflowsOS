@@ -455,6 +455,17 @@ class RouteEditor:
         self.pending_reason = reason
         self.mode = "diff"
 
+    def stage_strategy_toggle(self):
+        """Toggle routing strategy between configured order and LKGP (B-6).
+
+        Staged through the same diff gate as every other edit — nothing is
+        written until the user confirms the diff preview.
+        """
+        cfg = self.ed.load()
+        cur = cfg.get("strategy", "")
+        cfg["strategy"] = "" if cur == "lkgp" else "lkgp"
+        self._stage(cfg, f"strategy: {cur or 'configured order'} -> {cfg['strategy'] or 'configured order'}")
+
     # ------------------------------------------------------- edit/delete
 
     def open_edit(self, pref_idx: int):

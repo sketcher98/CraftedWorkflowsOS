@@ -11,17 +11,44 @@ from typing import List, Optional, Tuple
 
 
 @dataclass(frozen=True)
+class CellHealth:
+    """Per-cell (provider×model) health from the router's /health routes[].
+
+    Added when the router gained B-7 per-cell health — /health now reports
+    every route cell individually, which the TUI previously had no way to
+    see (provider-level only).
+    """
+    model: str
+    healthy: bool
+    failures: int = 0
+    hard_failed: bool = False
+    cooldown_until: Optional[datetime] = None
+    warm: bool = False
+
+    @property
+    def status_label(self) -> str:
+        if self.hard_failed:
+            return "HARD-FAILED"
+        if not self.healthy:
+            if self.cooldown_until:
+                return "COOLDOWN"
+            return "UNHEALTHY"
+        if self.warm:
+            return "HEALTHY (warm)"
+        return "HEALTHY"
+
+
+@dataclass(frozen=True)
 class ProviderHealth:
-    """
-    Provider health from /health endpoint.
-    This is PROVIDER-LEVEL only, not route-specific.
-    """
+    """Provider health from /health endpoint.
+    Includes per-cell routes[] when the router provides them (B-7)."""
     name: str
     healthy: bool
     failures: int
     hard_failed: bool
     catalog_models: int
     cooldown_until: Optional[datetime] = None
+    cells: Tuple[CellHealth, ...] = ()
 
     @property
     def status_label(self) -> str:

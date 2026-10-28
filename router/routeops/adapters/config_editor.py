@@ -206,6 +206,22 @@ class ConfigEditor:
         tmp.replace(self.config_path)
         return bak, self.config_path
 
+    # ------------------------------------------------------- strategy knob
+
+    def set_strategy(self, strategy: str) -> Tuple[Path, Path]:
+        """Set the routing strategy ("" = configured order, "lkgp" = LKGP).
+
+        B-6: LKGP is opt-in now. Empty string means the router honours the
+        configured provider order exactly. Uses the same backup→validate→
+        atomic-commit path as every other config change.
+        """
+        if strategy not in ("", "lkgp"):
+            raise ConfigEditorError(
+                f"unknown strategy '{strategy}' (allowed: '', 'lkgp')")
+        cfg = self.load()
+        cfg["strategy"] = strategy
+        return self.commit(cfg, reason=f"strategy={strategy or '(default)'}")
+
     # ---------------------------------------------------------------- diff
 
     def diff_summary(self, old: dict, new: dict) -> List[str]:
@@ -247,6 +263,20 @@ class ConfigEditor:
         for n in nv:
             if n not in ov:
                 lines.append(f"ADD provider    {n} ({nv[n]})")
+
+        # Strategy + retry block (B-6): config-level knobs that affect routing
+        old_strat = old.get("strategy", "")
+        new_strat = new.get("strategy", "")
+        if old_strat != new_strat:
+            lines.append("STRATEGY:")
+            lines.append(f"   - {old_strat or '(default: configured order)'}")
+            lines.append(f"   + {new_strat or '(default: configured order)'}")
+        old_retry = {k: v for k, v in (old.get("retry") or {}).items()}
+        new_retry = {k: v for k, v in (new.get("retry") or {}).items()}
+        for k in sorted(set(old_retry) | set(new_retry)):
+            if old_retry.get(k) != new_retry.get(k):
+                lines.append(f"RETRY {k}: {old_retry.get(k)} -> {new_retry.get(k)}")
+
         if not lines:
             lines.append("no changes")
         return lines

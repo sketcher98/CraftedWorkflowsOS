@@ -10,7 +10,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 from typing import List, Optional
-from routeops.models.provider import ProviderHealth
+from routeops.models.provider import ProviderHealth, CellHealth
 
 
 class HealthPollAdapter:
@@ -147,19 +147,42 @@ class HealthPollAdapter:
                 cooldown_until = datetime.fromisoformat(str(data['cooldown']).replace('Z', '+00:00'))
             except (ValueError, TypeError):
                 pass
-        elif 'cooldown_expires' in data:
+        if 'cooldown_expires' in data:
             try:
                 cooldown_until = datetime.fromisoformat(str(data['cooldown_expires']).replace('Z', '+00:00'))
             except (ValueError, TypeError):
                 pass
-        
+
+        # B-7: per-cell routes[] — the router now reports each provider×model
+        # cell individually. Parse them so the TUI can render real per-cell
+        # health instead of only the provider-level aggregate.
+        cells = []
+        for cell in data.get('routes') or []:
+            if not isinstance(cell, dict):
+                continue
+            c_cd = None
+            if cell.get('cooldown_until'):
+                try:
+                    c_cd = datetime.fromisoformat(str(cell['cooldown_until']).replace('Z', '+00:00'))
+                except (ValueError, TypeError):
+                    pass
+            cells.append(CellHealth(
+                model=str(cell.get('model', 'unknown')),
+                healthy=bool(cell.get('healthy', False)),
+                failures=int(cell.get('failures', 0) or 0),
+                hard_failed=bool(cell.get('hard_failed', False)),
+                cooldown_until=c_cd,
+                warm=bool(cell.get('warm', False)),
+            ))
+
         return ProviderHealth(
             name=provider_name,
             healthy=healthy,
             failures=failures,
             hard_failed=hard_failed,
             catalog_models=catalog_models,
-            cooldown_until=cooldown_until
+            cooldown_until=cooldown_until,
+            cells=tuple(cells),
         )
     
     def get_cached(self) -> List[ProviderHealth]:

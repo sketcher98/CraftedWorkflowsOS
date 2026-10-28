@@ -377,6 +377,39 @@ class ProvidersScreen:
         lines.append("")  # placeholder
         lines.append("")
 
+        # Per-cell health from /health routes[] (B-7) — the router now
+        # reports every provider×model cell individually. This is the
+        # ground truth that the provider-level green used to hide.
+        cells = getattr(pm.health, "cells", ()) or ()
+        if cells:
+            lines.append("ROUTER CELL HEALTH (from /health routes[]):")
+            for cell in cells:
+                c_short = cell.model.split("/")[-1][:24]
+                if cell.hard_failed:
+                    c_icon, c_color = "✗", curses.color_pair(4) | curses.A_BOLD
+                    c_status = "HARD-FAILED"
+                elif not cell.healthy and cell.cooldown_until:
+                    c_icon, c_color = "◐", curses.color_pair(3)
+                    c_status = f"COOLDOWN until {cell.cooldown_until.strftime('%H:%M:%S')}"
+                elif not cell.healthy:
+                    c_icon, c_color = "○", curses.color_pair(4)
+                    c_status = "UNHEALTHY"
+                elif cell.warm:
+                    c_icon, c_color = "●", curses.color_pair(2)
+                    c_status = "HEALTHY (warm)"
+                else:
+                    c_icon, c_color = "●", curses.color_pair(2)
+                    c_status = "HEALTHY"
+                seg_rows[len(lines)] = [
+                    ("  ", 0),
+                    (c_icon, c_color),
+                    (f"  {c_short:<24}", 0),
+                    (f" {c_status:<20}", c_color),
+                    (f" fail:{cell.failures:<3}", 0),
+                ]
+                lines.append("")  # placeholder
+            lines.append("")
+
         # Per-model health derived from JSONL (route_result success/fail counts)
         # Config is source of truth: only models in active preferences shown
         mh = getattr(self.app_state, '_model_health', {})
