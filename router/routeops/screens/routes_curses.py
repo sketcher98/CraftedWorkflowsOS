@@ -644,9 +644,13 @@ class RoutesScreen:
             my += 1
         term.write(my, 0, f"└{'─' * w}┘", curses.color_pair(1))
 
-        # Restart-needed banner if editor wrote config
+        # Restart-needed banner — only meaningful when the auto-restart
+        # FAILED. On success, _auto_restart_router() clears need_restart.
         if self.editor.need_restart:
-            term.write(rows - 4, 0, "⚠ CONFIG CHANGED — restart router to apply: kill $(pgrep -f '^\\./router$'); bash ~/CraftedWorkflowsOS/router/scripts/startr", curses.color_pair(3) | curses.A_BOLD)
+            term.write(rows - 4, 0,
+                       "⚠ ROUTER RESTART FAILED — start it manually: "
+                       "bash ~/CraftedWorkflowsOS/router/scripts/startr",
+                       curses.color_pair(4) | curses.A_BOLD)
 
         self._render_key_help(term, rows - 2, cols)
         self._render_disclaimer(term, rows - 1, cols)
@@ -659,7 +663,7 @@ class RoutesScreen:
 
     def _render_disclaimer(self, term, y: int, cols: int) -> None:
         disclaimer = ("EDITOR ACTIVE  |  writes config.json with .bak backup  |  "
-                      "router restart required after save")
+                      "confirmed save restarts the router automatically")
         term.write(y, 0, disclaimer[:cols], curses.color_pair(8))
 
     def _build_matrix_segments(self, pref, cols: int):

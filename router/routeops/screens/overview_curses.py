@@ -219,7 +219,7 @@ class OverviewScreen:
         if not enabled:
             return
         if 0 <= y < cols:
-            disc = "ROUTEOPS — external observer, read-only. Source: /health · /v1/models · config.json · router-events.jsonl"
+            disc = "ROUTEOPS — external observer of the router. Source: /health · /v1/models · config.json · router-events.jsonl"
             # Truncate to fit, then pad with spaces so the color fills the WHOLE row
             write(y, 0, disc[:cols].ljust(cols), curses.color_pair(8))
 
@@ -889,7 +889,7 @@ class OverviewScreen:
 
     def _render_disclaimer(self, term, y: int, cols: int) -> None:
         """Render mandatory disclaimer as a full-width colored bar."""
-        disclaimer = "ROUTEOPS — external observer, read-only. Source: /health · /v1/models · config.json · router-events.jsonl"
+        disclaimer = "ROUTEOPS — external observer of the router. Source: /health · /v1/models · config.json · router-events.jsonl"
         term.write(y, 0, disclaimer[:cols].ljust(cols), curses.color_pair(8))
 
     def _render_key_help(self, term, y: int, cols: int) -> None:

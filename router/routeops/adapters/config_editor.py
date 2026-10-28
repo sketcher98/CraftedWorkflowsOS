@@ -11,7 +11,6 @@ import json
 import os
 import shutil
 import subprocess
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -359,20 +358,33 @@ def router_restart_pending_note() -> str:
 def restart_router() -> Dict:
     """Stop current router by exact PID, start via startr, verify health.
     Only called with explicit user confirmation from the TUI.
+
+    The launcher lives at <router_dir>/scripts/startr — it was moved out of
+    ~/bin in eb1f01d. Do NOT hardcode ~/bin/startr here: that path no longer
+    exists, and the old code killed the router and then failed to restart it.
     """
+    router_dir = Path(ROUTER_CONFIG_JSON).parent
+    startr = router_dir / "scripts" / "startr"
+    stopr = router_dir / "scripts" / "stopr"
     try:
-        ps = subprocess.run(["pgrep", "-f", r"^\./router$"],
-                            capture_output=True, text=True)
-        pids = [p for p in ps.stdout.split() if p.strip()]
-        killed = 0
-        for pid in pids:
-            subprocess.run(["kill", pid], capture_output=True)
-            killed += 1
-        time.sleep(3)
-        r = subprocess.run(["bash", str(Path.home() / "bin" / "startr")],
-                           capture_output=True, text=True, timeout=60)
+        if not startr.exists():
+            return {"ok": False,
+                    "detail": f"launcher missing: {startr}"}
+
+        # Use the hardened stopr (verifies binary identity, SIGTERM, waits
+        # for graceful exit, verifies the port is free) instead of a raw
+        # pgrep+kill that can leave the port occupied.
+        stop = subprocess.run(["bash", str(stopr)],
+                              capture_output=True, text=True, timeout=60)
+        stop_out = stop.stdout.strip()
+        if stop.returncode not in (0,) and "already stopped" not in stop_out.lower():
+            return {"ok": False,
+                    "detail": f"stopr failed (exit {stop.returncode}): {stop_out[-200:]}"}
+
+        r = subprocess.run(["bash", str(startr)],
+                           capture_output=True, text=True, timeout=90)
         out = r.stdout.strip()
         return {"ok": "Health: OK" in out or "already running" in out.lower(),
-                "detail": f"killed {killed}; startr: {out[-200:]}"}
+                "detail": f"stopr+startr: {out[-200:]}"}
     except Exception as e:
         return {"ok": False, "detail": str(e)[:200]}

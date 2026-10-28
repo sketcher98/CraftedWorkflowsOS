@@ -444,9 +444,10 @@ class SettingsScreen:
 
         lines.append(("", False))
         # FIX: the router does NOT hot-reload — loadConfig() runs once at
-        # startup. Config edits require a manual restart to take effect.
-        lines.append(("After changes: restart the router to apply (loadConfig runs once at startup).", False))
-        lines.append(("Restart with: ~/CraftedWorkflowsOS/router/scripts/startr", False))
+        # startup. A confirmed commit (Enter -> diff -> Enter) restarts the
+        # router automatically; this line describes what happens on commit.
+        lines.append(("On confirmed save: the router is restarted automatically.", False))
+        lines.append(("Manual restart: bash ~/CraftedWorkflowsOS/router/scripts/startr", False))
 
         # Clamp cursor
         n_editable = len(editables)

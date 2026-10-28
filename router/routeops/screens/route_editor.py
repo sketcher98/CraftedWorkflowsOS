@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from routeops.adapters.config_editor import (
-    ConfigEditor, ConfigEditorError, router_restart_pending_note)
+    ConfigEditor, ConfigEditorError)
 from routeops.tui.bars import CLIENT_ABORT_ERRORS
 
 
@@ -643,15 +643,14 @@ class RouteEditor:
             diff = self.ed.diff_summary(old, cfg)
             bak, path = self.ed.commit(cfg, reason)
             self.need_restart = True
-            # Observer contract: the TUI never restarts the production router.
-            # A config commit is staged to disk; the operator restarts in
-            # their own maintenance window. Banner + note, no auto-restart.
+            # User-mandated: a confirmed config commit restarts the router
+            # immediately so changes go live without a manual window. The
+            # banner in routes_curses only appears if that restart FAILS.
             self.probe_results = diff + [
                 f"backup: {Path(bak).name}",
-                router_restart_pending_note(),
             ]
             self.mode = "result"
-            self.msg = f"SAVED: {reason}. Router restart REQUIRED to apply."
+            self.msg = f"SAVED: {reason}. Restarting router..."
             # keep hermes default aligned with preferences[0] (dangling-link killer)
             sync_note = self._sync_hermes_default(cfg)
             if sync_note:
