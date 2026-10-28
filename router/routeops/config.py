@@ -19,15 +19,37 @@ def get_router_dir() -> Path:
     return Path.home() / "CraftedWorkflowsOS" / "router"
 
 
+def get_router_endpoint() -> tuple:
+    """Read host/port from config.json (single source of truth).
+
+    Returns (base_url, host, port). Falls back to 127.0.0.1:8643 if the
+    config is missing or unreadable — the TUI never hardcodes a port as a
+    displayed fact, it falls back and says so.
+    """
+    import json
+    cfg_path = get_router_dir() / "config.json"
+    host, port = "127.0.0.1", 8643
+    try:
+        data = json.loads(cfg_path.read_text())
+        host = str(data.get("host") or host)
+        port = int(data.get("port") or port)
+    except Exception:
+        pass
+    return f"http://{host}:{port}", host, port
+
+
+def get_hermes_agent_root() -> Path:
+    """Path to the Hermes agent source tree (for liveness detection)."""
+    return Path.home() / ".hermes" / "hermes-agent"
+
+
 # Telemetry file paths
 ROUTER_EVENTS_JSONL = get_router_dir() / "router-events.jsonl"
 ROUTER_CONFIG_JSON = get_router_dir() / "config.json"
 ROUTER_LOG = get_router_dir() / "router.log"
 
-# Router HTTP endpoints
-ROUTER_HOST = "127.0.0.1"
-ROUTER_PORT = 8643
-ROUTER_BASE_URL = f"http://{ROUTER_HOST}:{ROUTER_PORT}"
+# Router HTTP endpoints — host/port read from config.json (source of truth)
+ROUTER_BASE_URL, ROUTER_HOST, ROUTER_PORT = get_router_endpoint()
 ROUTER_HEALTH_URL = f"{ROUTER_BASE_URL}/health"
 ROUTER_MODELS_URL = f"{ROUTER_BASE_URL}/v1/models"
 

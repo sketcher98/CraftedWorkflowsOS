@@ -8,10 +8,15 @@ from datetime import datetime
 
 from routeops.state import AppState
 from routeops.models.request import EventModel
+from routeops.adapters.history_index import HistoryIndex
 
 
 class HistoryScreen:
-    """History screen showing filterable event log from JSONL."""
+    """History screen showing filterable event log from the FULL JSONL file.
+
+    The index is a real full-file scan (see adapters/history_index.py) — the
+    footer reports true file-wide totals, not the 500-event in-memory tail.
+    """
 
     def __init__(self, app_state: AppState):
         self.app_state = app_state
@@ -21,10 +26,29 @@ class HistoryScreen:
         self.show_detail = False
         self.detail_scroll = 0
         self.filter_names = ["all", "attempts", "results", "fallbacks", "cooldowns", "health", "errors"]
+        # Full-file index — built lazily on first render
+        self._index: Optional[HistoryIndex] = None
+        self._index_path: str = ""
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(60, width)
         self.height = max(15, height)
+
+    def _ensure_index(self) -> HistoryIndex:
+        """Build/refresh the full-file index (throttled to every 3s)."""
+        import time
+        from routeops.config import ROUTER_EVENTS_JSONL
+        path = str(ROUTER_EVENTS_JSONL)
+        now = time.time()
+        if self._index is None or path != self._index_path:
+            self._index = HistoryIndex(path)
+            self._index_path = path
+            self._index.refresh()
+            self._last_index = now
+        elif now - getattr(self, "_last_index", 0) > 3.0:
+            self._index.refresh()
+            self._last_index = now
+        return self._index
 
     def handle_key(self, key: int) -> bool:
         """Handle key press. Returns True if handled."""
@@ -79,23 +103,12 @@ class HistoryScreen:
         self.scroll_offset = max(0, min(self.scroll_offset, max(0, item_count - visible_rows)))
 
     def _get_filtered_events(self) -> List[EventModel]:
-        """Get events filtered by current filter mode — NEWEST FIRST."""
-        events = list(self.app_state.recent_events)
+        """Get events filtered by current filter mode — NEWEST FIRST.
 
-        if self.filter_mode == "attempts":
-            events = [e for e in events if e.event_type == "route_attempt"]
-        elif self.filter_mode == "results":
-            events = [e for e in events if e.event_type == "route_result"]
-        elif self.filter_mode == "fallbacks":
-            events = [e for e in events if e.event_type in ("route_fallback", "route_cooldown", "route_quarantined", "route_recovered")]
-        elif self.filter_mode == "cooldowns":
-            events = [e for e in events if e.event_type == "route_cooldown"]
-        elif self.filter_mode == "health":
-            events = [e for e in events if e.event_type == "provider_health"]
-        elif self.filter_mode == "errors":
-            events = [e for e in events if e.event_type == "route_result" and e.error]
-        # newest first — the JSONL tail is ascending, reverse for display
-        return list(reversed(events))
+        Sourced from the FULL-FILE index, not the 500-event in-memory tail.
+        """
+        index = self._ensure_index()
+        return index.query(self.filter_mode)
 
     def render(self, term) -> None:
         """Render history screen."""
@@ -141,10 +154,18 @@ class HistoryScreen:
                     term.write(y, 2, f"  {line[:cols-6]}", color)
                 y += 1
 
-            # Scroll indicator
-            if len(events) > visible_rows:
-                indicator = f"  ↑↓ {self.scroll_offset + 1}-{min(self.scroll_offset + visible_rows, len(events))} of {len(events)}"
-                term.write(y, 0, indicator[:cols], curses.color_pair(5))
+            # Scroll indicator — reports the TRUE file-wide total, not the
+            # in-memory window size.
+            index = self._ensure_index()
+            true_total = index.count_for(self.filter_mode)
+            shown_from = self.scroll_offset + 1 if events else 0
+            shown_to = min(self.scroll_offset + visible_rows, len(events))
+            if true_total:
+                indicator = (f"  ↑↓ {shown_from}-{shown_to} of {true_total} "
+                             f"(file)  ·  {len(events)} in memory")
+            else:
+                indicator = "  (no events)"
+            term.write(y, 0, indicator[:cols], curses.color_pair(5))
 
     def _age_tag(self, event: EventModel, now) -> str:
         if not event.timestamp:

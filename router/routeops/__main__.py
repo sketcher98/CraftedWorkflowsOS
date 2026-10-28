@@ -27,6 +27,7 @@ def main():
     runtime = create_runtime()
     # Use the AppState created inside runtime (has _tui_start_time set)
     app_state = runtime.app_state
+    app_state.runtime = runtime  # Settings screen live-edits workers via this
     
     # Set initial paths on the shared AppState
     app_state.settings.router_events_path = str(ROUTER_EVENTS_JSONL)
@@ -55,22 +56,23 @@ def main():
                 # Process runtime updates
                 runtime._drain_wakeup()
                 runtime._process_updates()
-                
+
                 # Resize screens
                 for screen in shell.screens.values():
                     if hasattr(screen, 'set_size'):
                         screen.set_size(term.size.cols, term.size.rows)
-                
-                # Render current screen
-                shell._render_current()
-                
+
+                # Render current screen (skipped while paused — data keeps updating)
+                if not shell.app_state.paused:
+                    shell._render_current()
+
                 # LIVE REFRESH (procmon pattern): halfdelay(7) = 700ms window
                 # for a keypress; on timeout getch returns ERR(-1) and the
                 # loop re-renders with fresh worker data. Every screen stays
                 # live without per-screen timers.
                 term.halfdelay(7)
                 key = term.getch()
-                
+
                 if key != -1:
                     if not shell._handle_key(key):
                         break

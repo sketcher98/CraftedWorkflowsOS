@@ -23,6 +23,8 @@ class ScreenType(str, Enum):
     DIAGNOSTICS = "diagnostics"
     SETTINGS = "settings"
     API_KEYS = "api_keys"
+    PERKEY = "perkey"
+    KEYMGMT = "keymgmt"
 
 
 class NavigationStack:
@@ -104,6 +106,9 @@ class SettingsModel:
 
 @dataclass
 class AppState:
+    # runtime back-reference (set by __main__ after create_runtime; workers
+    # read their interval each loop so live edits take effect immediately)
+    runtime = None
     """Global application state - single source of truth."""
     
     # Data models
@@ -127,6 +132,12 @@ class AppState:
     # Runtime
     last_refresh: datetime = field(default_factory=datetime.now)
     adapter_errors: Dict[str, str] = field(default_factory=dict)
+
+    # Live Hermes PIDs observed by the process worker (empty = not observed)
+    _hermes_pids: List[int] = field(default_factory=list)
+    # Router endpoint actually in use (host, port) — from config.json
+    router_host: str = "127.0.0.1"
+    router_port: int = 8643
 
     # Adapter data caches
     _health_cache: Dict[str, Any] = field(default_factory=dict)

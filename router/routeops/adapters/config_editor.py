@@ -8,6 +8,7 @@ Security invariants (from config.py):
 """
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -20,6 +21,110 @@ from routeops.config import ROUTER_CONFIG_JSON, HTTP_CONNECT_TIMEOUT, HTTP_READ_
 
 class ConfigEditorError(Exception):
     pass
+
+
+class EnvEditor:
+    """Transactional editor for ~/.hermes/.env — same doctrine as ConfigEditor.
+
+    Workflow: backup → edit → validate → atomic tmp+rename → verify.
+    On any failure the backup is restored automatically (instant rollback).
+    The file is NEVER written with a plain open(...,'w'): a crash mid-write
+    would destroy every provider credential with no recovery path.
+    """
+
+    ENV_PATH = Path.home() / ".hermes" / ".env"
+
+    def __init__(self, env_path: Optional[Path] = None):
+        self.env_path = Path(env_path) if env_path else self.ENV_PATH
+
+    def backup(self) -> Optional[Path]:
+        """Timestamped backup before any write. None if the file doesn't exist."""
+        if not self.env_path.exists():
+            return None
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        bak = self.env_path.with_name(self.env_path.name + ".bak-" + stamp)
+        shutil.copy2(self.env_path, bak)
+        return bak
+
+    def _validate(self, text: str) -> None:
+        """Every non-blank, non-comment line must be KEY=value with a sane KEY."""
+        import re
+        for i, line in enumerate(text.splitlines(), 1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if "=" not in stripped:
+                raise ConfigEditorError(
+                    f"line {i} is not KEY=value: {stripped[:60]}")
+            key = stripped.split("=", 1)[0].strip()
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+                raise ConfigEditorError(f"line {i} has invalid key name: {key[:60]}")
+
+    def set_var(self, key_env: str, value: str) -> Path:
+        """Set (or replace) KEY=value. Returns the backup path.
+
+        Raises ConfigEditorError on any failure — the original file is
+        restored before the exception propagates.
+        """
+        if not key_env or "=" in key_env or "\n" in key_env:
+            raise ConfigEditorError(f"invalid env var name: {key_env!r}")
+        if "\n" in value or "\r" in value:
+            raise ConfigEditorError("env var value contains a newline")
+
+        bak = self.backup()
+        original = None
+        if bak is not None:
+            try:
+                original = self.env_path.read_text()
+            except Exception:
+                original = None
+
+        try:
+            text = original if original is not None else ""
+            lines = text.splitlines(keepends=True)
+            new_line = f"{key_env}={value}\n"
+            replaced = False
+            out = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and \
+                        stripped.split("=", 1)[0].strip() == key_env:
+                    out.append(new_line)
+                    replaced = True
+                else:
+                    out.append(line if line.endswith("\n") else line + "\n")
+            if not replaced:
+                if out and not out[-1].endswith("\n"):
+                    out[-1] += "\n"
+                out.append(new_line)
+
+            result = "".join(out)
+            self._validate(result)
+
+            tmp = self.env_path.with_name(self.env_path.name + ".tmp")
+            with open(tmp, "w") as f:
+                f.write(result)
+                f.flush()
+                os.fsync(f.fileno())
+            # Verify tmp parses before it replaces the live file
+            self._validate(tmp.read_text())
+            tmp.replace(self.env_path)
+            return bak
+        except Exception:
+            # Instant rollback — restore the original file
+            try:
+                if original is not None:
+                    tmp = self.env_path.with_name(self.env_path.name + ".rollback")
+                    with open(tmp, "w") as f:
+                        f.write(original)
+                    tmp.replace(self.env_path)
+                elif bak is None:
+                    # File did not exist before and creation failed
+                    if self.env_path.exists():
+                        self.env_path.unlink()
+            except Exception:
+                pass
+            raise
 
 
 class ConfigEditor:

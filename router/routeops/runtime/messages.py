@@ -53,6 +53,7 @@ class ConfigUpdate(Update):
 class ProcessUpdate(Update):
     """Process inspection update"""
     candidates: List[Any] = field(default_factory=list)  # ProcessCandidate
+    hermes_pids: List[int] = field(default_factory=list)  # live Hermes PIDs
 
 
 @dataclass(frozen=True)

@@ -11,15 +11,17 @@ from routeops.models.provider import ProviderHealth
 
 
 class DiagnosticsScreen:
-    """Diagnostics screen with 5 tabs: Connectivity, Latency, Errors, Binary, Dangling Models."""
+    """Diagnostics screen with 6 tabs: Connectivity, Latency, Errors, Binary, Dangling Models, Metrics."""
 
     def __init__(self, app_state: AppState):
         self.app_state = app_state
-        self.current_tab = 0  # 0=connectivity, 1=latency, 2=errors, 3=binary, 4=dangling
-        self.tab_names = ["Connectivity", "Latency", "Errors", "Binary", "Dangling Models"]
+        self.current_tab = 0  # 0=connectivity, 1=latency, 2=errors, 3=binary, 4=dangling, 5=metrics
+        self.tab_names = ["Connectivity", "Latency", "Errors", "Binary", "Dangling Models", "Metrics"]
         self.scroll_offset = 0
         self._dangling_cache = None
         self._dangling_checked_at = None
+        self._metrics_cache = None
+        self._metrics_checked_at = None
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(60, width)
@@ -27,11 +29,13 @@ class DiagnosticsScreen:
 
     def handle_key(self, key: int) -> bool:
         """Handle key press. Returns True if handled."""
-        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5')):
+        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6')):
             self.current_tab = int(chr(key)) - 1
             self.scroll_offset = 0
             if self.current_tab == 4:
                 self._dangling_cache = None  # force rescan on tab entry
+            elif self.current_tab == 5:
+                self._metrics_cache = None  # force refresh on tab entry
             return True
 
         if key in (curses.KEY_LEFT, ord('h')):
@@ -39,13 +43,17 @@ class DiagnosticsScreen:
             self.scroll_offset = 0
             if self.current_tab == 4:
                 self._dangling_cache = None
+            elif self.current_tab == 5:
+                self._metrics_cache = None
             return True
 
         if key in (curses.KEY_RIGHT, ord('l')):
-            self.current_tab = min(4, self.current_tab + 1)
+            self.current_tab = min(5, self.current_tab + 1)
             self.scroll_offset = 0
             if self.current_tab == 4:
                 self._dangling_cache = None
+            elif self.current_tab == 5:
+                self._metrics_cache = None
             return True
 
         if key in (curses.KEY_UP, ord('k')):
@@ -93,6 +101,8 @@ class DiagnosticsScreen:
             lines = self._build_errors_lines(cols - 4)
         elif self.current_tab == 4:
             lines = self._build_dangling_lines(cols - 4)
+        elif self.current_tab == 5:
+            lines = self._build_metrics_lines(cols - 4)
         else:
             lines = self._build_binary_lines(cols - 4)
 
@@ -527,3 +537,161 @@ class DiagnosticsScreen:
             lines.append("  RESULT: NOT RUNNING")
 
         return [line[:w] for line in lines]
+
+    def _build_metrics_lines(self, width: int) -> List[str]:
+        """Build Prometheus metrics visualization lines."""
+        lines = []
+        w = width - 4
+
+        lines.append("PROMETHEUS METRICS (from /metrics endpoint)")
+        lines.append("─" * w)
+        lines.append("")
+
+        # Fetch metrics if cache is stale
+        import time
+        now = time.time()
+        if (self._metrics_cache is None
+                or self._metrics_checked_at is None
+                or (now - self._metrics_checked_at) > 10):  # 10s cache
+            self._metrics_cache = self._fetch_prometheus_metrics()
+            self._metrics_checked_at = now
+
+        metrics = self._metrics_cache
+
+        if "error" in metrics:
+            lines.append(f"  ✗ Fetch failed: {metrics['error']}")
+            return [line[:w] for line in lines]
+
+        # Summary view - key router metrics
+        lines.append("SUMMARY — KEY ROUTER METRICS")
+        lines.append("─" * w)
+        lines.append("")
+
+        # router_requests_total
+        if "router_requests_total" in metrics:
+            lines.append("  router_requests_total:")
+            for labels, value in metrics["router_requests_total"]:
+                lines.append(f"    {labels} = {value}")
+            lines.append("")
+
+        # router_keys_healthy
+        if "router_keys_healthy" in metrics:
+            lines.append("  router_keys_healthy:")
+            for labels, value in metrics["router_keys_healthy"]:
+                lines.append(f"    {labels} = {value}")
+            lines.append("")
+
+        # router_routes_healthy
+        if "router_routes_healthy" in metrics:
+            lines.append("  router_routes_healthy:")
+            for labels, value in metrics["router_routes_healthy"]:
+                lines.append(f"    {labels} = {value}")
+            lines.append("")
+
+        # router_catalog_models
+        if "router_catalog_models" in metrics:
+            lines.append("  router_catalog_models:")
+            for labels, value in metrics["router_catalog_models"]:
+                lines.append(f"    {labels} = {value}")
+            lines.append("")
+
+        # router_routes_hard_failed
+        if "router_routes_hard_failed" in metrics:
+            lines.append("  router_routes_hard_failed:")
+            for labels, value in metrics["router_routes_hard_failed"]:
+                lines.append(f"    {labels} = {value}")
+            lines.append("")
+
+        # router_routes_in_cooldown
+        if "router_routes_in_cooldown" in metrics:
+            lines.append("  router_routes_in_cooldown:")
+            for labels, value in metrics["router_routes_in_cooldown"]:
+                lines.append(f"    {labels} = {value}")
+            lines.append("")
+
+        # Latency histogram
+        if "router_request_duration_seconds" in metrics:
+            lines.append("  router_request_duration_seconds (histogram):")
+            lines.append("    (see Latency tab for p50/p90/p99)")
+            lines.append("")
+
+        # System metrics
+        lines.append("SYSTEM METRICS")
+        lines.append("─" * w)
+        lines.append("")
+
+        sys_metrics = [
+            "go_goroutines",
+            "go_memstats_heap_alloc_bytes",
+            "go_memstats_heap_inuse_bytes",
+            "process_resident_memory_bytes",
+            "process_cpu_seconds_total",
+        ]
+        for m in sys_metrics:
+            if m in metrics:
+                for labels, value in metrics[m]:
+                    lines.append(f"  {m}{labels} = {value}")
+                lines.append("")
+
+        # All router metrics list
+        lines.append("ALL ROUTER METRICS")
+        lines.append("─" * w)
+        lines.append("")
+        router_metrics = [m for m in metrics.keys() if m.startswith("router_")]
+        for m in sorted(router_metrics):
+            count = len(metrics[m])
+            lines.append(f"  {m} ({count} series)")
+
+        return [line[:w] for line in lines]
+
+    def _fetch_prometheus_metrics(self) -> Dict:
+        """Fetch and parse Prometheus metrics from /metrics endpoint."""
+        import urllib.request
+        import urllib.error
+
+        metrics = {}
+
+        try:
+            base_url = self.app_state.settings.router_base_url
+            if not base_url:
+                base_url = "http://127.0.0.1:8643"
+            url = f"{base_url}/metrics"
+            req = urllib.request.Request(url, headers={'Accept': 'text/plain'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                text = resp.read().decode('utf-8')
+
+            # Parse Prometheus text format
+            current_metric = None
+            for line in text.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    if line.startswith('# TYPE'):
+                        parts = line.split(' ', 2)
+                        if len(parts) >= 3:
+                            current_metric = parts[2].split('{')[0]
+                            if current_metric not in metrics:
+                                metrics[current_metric] = []
+                    continue
+
+                # Parse metric line
+                if '{' in line:
+                    metric_part, rest = line.split('{', 1)
+                    labels_part, value_part = rest.split('}', 1)
+                    labels = labels_part
+                    value = value_part.strip().split(' ')[0]
+                else:
+                    parts = line.split(' ')
+                    metric_part = parts[0]
+                    labels = ""
+                    value = parts[1] if len(parts) > 1 else ""
+
+                if metric_part not in metrics:
+                    metrics[metric_part] = []
+                metrics[metric_part].append((labels, value))
+
+        except urllib.error.URLError as e:
+            metrics = {"error": f"Connection failed: {e}"}
+        except Exception as e:
+            metrics = {"error": f"Parse error: {e}"}
+
+        return metrics

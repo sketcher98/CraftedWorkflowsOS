@@ -3,6 +3,7 @@ Navigation Shell - Main TUI event loop with screen routing and input handling.
 """
 
 import curses
+from datetime import datetime
 from typing import Optional, Dict, Callable
 
 from routeops.tui.curses_terminal import curses_session, CursesTerminal
@@ -13,10 +14,16 @@ from routeops.screens.routes_curses import RoutesScreen
 from routeops.screens.history_curses import HistoryScreen
 from routeops.screens.diagnostics_curses import DiagnosticsScreen
 from routeops.screens.settings_curses import SettingsScreen
+from routeops.screens.perkey_curses import PerKeyHealthScreen
+from routeops.screens.keymgmt_curses import KeyManagementScreen
 
 
 class NavigationShell:
     """Main navigation shell managing screen routing and input."""
+
+    # Add new screen types (accessed from within other screens)
+    PERKEY = "perkey"
+    KEYMGMT = "keymgmt"
 
     # Cycle order: Overview -> Providers -> Routes -> History -> Diag -> Settings
     SCREEN_CYCLE: list = [
@@ -31,9 +38,9 @@ class NavigationShell:
         self.running = False
         
         # Screen instances
-        self.screens: Dict[ScreenType, object] = {}
+        self.screens: Dict[str, object] = {}
         
-        # Key mappings to screens
+        # Key mappings to screens (top-level only)
         self.screen_keys = {
             # Direct navigation
             ord('p'): ScreenType.PROVIDERS,
@@ -81,6 +88,8 @@ class NavigationShell:
         self.screens[ScreenType.HISTORY] = HistoryScreen(self.app_state)
         self.screens[ScreenType.DIAGNOSTICS] = DiagnosticsScreen(self.app_state)
         self.screens[ScreenType.SETTINGS] = SettingsScreen(self.app_state)
+        self.screens[self.PERKEY] = PerKeyHealthScreen(self.app_state)
+        self.screens[self.KEYMGMT] = KeyManagementScreen(self.app_state)
 
     def _render_current(self) -> None:
         """Render current screen."""
@@ -93,17 +102,30 @@ class NavigationShell:
     def _handle_key(self, key: int) -> bool:
         """Handle key press. Returns False to quit."""
         screen = self.screens.get(self.current_screen)
-        
+
         # Let current screen handle key first
         if screen and hasattr(screen, 'handle_key'):
             handled = screen.handle_key(key)
+            if handled == "keymgmt":
+                self._enter_provider_screen(self.KEYMGMT)
+                return True
+            if handled == "perkey":
+                self._enter_provider_screen(self.PERKEY)
+                return True
             if handled:
                 return True
-        
+
+        # Global pause/resume (space) — must be checked BEFORE screen keys so it
+        # works from every screen. Editor overlays consume space themselves.
+        if key == 32:  # space
+            self.app_state.paused = not self.app_state.paused
+            self.app_state.last_refresh = datetime.now()
+            return True
+
         # Global keys
         if key == ord('q') and self.current_screen == ScreenType.OVERVIEW:
             return False  # Quit on 'q' from overview
-        
+
         if key == 27:  # Esc
             if self.current_screen != ScreenType.OVERVIEW:
                 self.current_screen = ScreenType.OVERVIEW
@@ -138,3 +160,18 @@ class NavigationShell:
             idx = 0
         nxt = (idx + delta) % len(self.SCREEN_CYCLE)
         self.current_screen = self.SCREEN_CYCLE[nxt]
+
+    def _enter_provider_screen(self, screen_id) -> None:
+        """Enter keymgmt/perkey with selection synced to the provider the
+        user had highlighted (app_state.detail_target). Both screens sort
+        providers identically (routed-count desc), so the index transfers."""
+        screen = self.screens.get(screen_id)
+        target = getattr(self.app_state, "detail_target", None)
+        if screen is not None and target and hasattr(screen, "_get_sorted_providers"):
+            try:
+                provs = screen._get_sorted_providers()
+                if target in provs:
+                    screen.selected_provider = provs.index(target)
+            except Exception:
+                pass
+        self.current_screen = screen_id

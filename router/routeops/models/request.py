@@ -48,6 +48,7 @@ class EventModel:
     from_preference: Optional[str] = None
     to_preference: Optional[str] = None
     context: str = "request"
+    key_env: Optional[str] = None
 
     @classmethod
     def from_json(cls, data: dict) -> 'EventModel':
@@ -75,6 +76,7 @@ class EventModel:
             from_preference=data.get('from_preference'),
             to_preference=data.get('to_preference'),
             context=data.get('context', 'request'),
+            key_env=data.get('key_env'),
         )
 
 

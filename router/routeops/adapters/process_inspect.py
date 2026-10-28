@@ -200,7 +200,37 @@ class ProcessInspectAdapter:
     def get_cached(self) -> List[ProcessCandidate]:
         """Get cached candidates."""
         return list(self._cached_candidates)
-    
+
+    def detect_hermes_pids(self) -> List[int]:
+        """Find live Hermes processes (agent / gateway / MCP servers).
+
+        Read-only: reads /proc/<pid>/cmdline only. Never reads /proc/<pid>/environ
+        (that would expose credentials). A Hermes "process" is any process whose
+        cmdline references the hermes-agent tree or a known Hermes module.
+        """
+        pids = []
+        agent_root = str(Path.home() / ".hermes" / "hermes-agent")
+        markers = (agent_root, "tui_gateway.entry", "twitter_mcp.server")
+        try:
+            proc_dir = Path("/proc")
+            for entry in proc_dir.iterdir():
+                try:
+                    if not entry.is_dir():
+                        continue
+                    pid = int(entry.name)
+                except (ValueError, OSError):
+                    continue
+                try:
+                    with open(entry / "cmdline", "r") as f:
+                        cmdline = f.read()
+                except (OSError, FileNotFoundError, PermissionError):
+                    continue
+                if any(m in cmdline for m in markers):
+                    pids.append(pid)
+        except (PermissionError, OSError):
+            return []
+        return sorted(pids)
+
     def get_production_process(self) -> Optional[ProcessCandidate]:
         """Get the production router process if found."""
         for candidate in self._cached_candidates:

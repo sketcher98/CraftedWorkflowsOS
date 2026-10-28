@@ -127,14 +127,16 @@ class ProcessWorker(BaseWorker):
     
     def poll(self) -> Optional[ProcessUpdate]:
         candidates = self.adapter.poll()
-        if not candidates:
+        hermes_pids = self.adapter.detect_hermes_pids()
+        if not candidates and not hermes_pids:
             return None
-        
+
         return ProcessUpdate(
             source="process",
             timestamp=datetime.now(),
             freshness=DataFreshness.FRESH,
-            candidates=candidates
+            candidates=candidates,
+            hermes_pids=hermes_pids
         )
 
 
