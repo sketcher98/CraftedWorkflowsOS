@@ -615,6 +615,28 @@ class RouteEditor:
         except Exception as e:
             return f"SYNC FAILED: {str(e)[:60]}"
 
+    def _auto_restart_router(self, reason: str = ""):
+        """Restart the router immediately after a confirmed config commit.
+
+        User-mandated behavior: approve the diff, save, and the router
+        restarts at once so changes take effect without a manual window.
+        Only runs from _commit/_commit_pending — AFTER the staged-diff gate
+        has been confirmed — never from a keystroke.
+        """
+        try:
+            from routeops.adapters.config_editor import restart_router
+            result = restart_router()
+            if result.get("ok"):
+                self.need_restart = False  # restart done — banner cleared
+                self.msg = f"SAVED: {reason}. Router restarted."
+                self.probe_results = [f"✅ router restart: OK"] + (self.probe_results or [])
+            else:
+                # keep banner + manual command as fallback
+                self.msg = f"SAVED: {reason}, but router restart FAILED: {result.get('detail', '')[:80]}"
+                self.probe_results = [f"⚠ router restart failed — manual: kill $(pgrep -f '^\\./router$'); bash ~/bin/startr"] + (self.probe_results or [])
+        except Exception as e:
+            self.msg = f"SAVED: {reason}, but router restart errored: {str(e)[:60]}"
+
     def _commit(self, cfg, reason: str):
         try:
             old = self.ed.load()
@@ -652,6 +674,9 @@ class RouteEditor:
                     self.app_state.config = fresh
             except Exception:
                 pass  # poller will catch up within 60s worst case
+            # AUTO-RESTART ROUTER — user-mandated: after a confirmed diff
+            # commit, restart immediately so changes go live now.
+            self._auto_restart_router(reason)
         except ConfigEditorError as e:
             self.pending = None
             self.mode = "result"

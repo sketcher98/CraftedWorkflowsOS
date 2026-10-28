@@ -271,7 +271,19 @@ class SettingsScreen:
             from routeops.adapters.config_editor import ConfigEditor
             editor = ConfigEditor()
             bak, _ = editor.commit(self.pending_cfg, reason="settings router tab")
-            self._flash(f"Saved (bak: {bak.name}) — restart router to apply")
+            self._flash(f"Saved (bak: {bak.name}) — Restarting router now")
+            # User-mandated: a confirmed config commit restarts the router
+            # immediately so the change goes live without a manual window.
+            try:
+                from routeops.adapters.config_editor import restart_router
+                result = restart_router()
+                if not result.get("ok"):
+                    self._flash(f"Router restart FAILED: {result.get('detail','')[:80]}")
+                else:
+                    self.status_msg = "Router restarted — config live."
+                    self.status_timer = 40
+            except Exception as e:
+                self._flash(f"Router restart errored: {str(e)[:60]}")
         except Exception as e:
             self._flash(f"SAVE FAILED: {e}")
         self.confirm_diff = False
@@ -416,11 +428,9 @@ class SettingsScreen:
 
         r = cfg.get("retry", {})
         lines = []
-        # S3: 'saves immediately' was misleading — edits are STAGED until
-        # confirmed through the diff gate, and even then only apply after a
-        # router restart.
+        # Confirm-gated edits; restart happens automatically on commit.
         lines.append(("RETRY & TIMEOUTS (+/- stages, Enter reviews diff, Enter commits)", False))
-        lines.append(("Applied only after a router restart (loadConfig runs once at startup)", False))
+        lines.append(("Commit auto-restarts the router — changes apply immediately", False))
         lines.append(("", False))
 
         editables = self._router_editables()
@@ -471,7 +481,7 @@ class SettingsScreen:
             "",
             "EDITOR SAFETY",
             "  Every config write: timestamped .bak -> validate -> atomic rename",
-            "  Router never auto-restarts from TUI.",
+            "  Confirmed commits auto-restart the router (user-mandated).",
             "",
             "RouteOps v0.2 — Phase 1B (editor + merged key tests)",
         ]
