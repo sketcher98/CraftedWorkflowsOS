@@ -640,10 +640,15 @@ class RouteEditor:
             diff = self.ed.diff_summary(old, cfg)
             bak, path = self.ed.commit(cfg, reason)
             self.need_restart = True
-            # Don't add manual restart note — auto-restart handles it
-            self.probe_results = diff + [f"backup: {Path(bak).name}"]
+            # Observer contract: the TUI never restarts the production router.
+            # A config commit is staged to disk; the operator restarts in
+            # their own maintenance window. Banner + note, no auto-restart.
+            self.probe_results = diff + [
+                f"backup: {Path(bak).name}",
+                router_restart_pending_note(),
+            ]
             self.mode = "result"
-            self.msg = f"SAVED: {reason}. Restarting router..."
+            self.msg = f"SAVED: {reason}. Router restart REQUIRED to apply."
             # keep hermes default aligned with preferences[0] (dangling-link killer)
             sync_note = self._sync_hermes_default(cfg)
             if sync_note:
@@ -666,8 +671,6 @@ class RouteEditor:
                     self.app_state.config = fresh
             except Exception:
                 pass  # poller will catch up within 60s worst case
-            # AUTO-RESTART ROUTER
-            self._auto_restart_router(reason)
         except ConfigEditorError as e:
             self.pending = None
             self.mode = "result"

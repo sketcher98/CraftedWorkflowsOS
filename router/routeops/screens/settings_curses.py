@@ -356,8 +356,10 @@ class SettingsScreen:
             lines.append((f"{marker}{item['label']:<28} {val}{hold_note}", True))
 
         lines.append(("", False))
-        lines.append(("After changes: router hot-reloads config on next request.", False))
-        lines.append(("If not, restart with: ~/bin/startr", False))
+        # FIX: the router does NOT hot-reload — loadConfig() runs once at
+        # startup. Config edits require a manual restart to take effect.
+        lines.append(("After changes: restart the router to apply (loadConfig runs once at startup).", False))
+        lines.append(("Restart with: ~/bin/startr", False))
 
         # Clamp cursor
         n_editable = len(editables)

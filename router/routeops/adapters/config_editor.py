@@ -288,10 +288,14 @@ class ConfigEditor:
         """Run curl via bash subshell. Sources ~/.hermes/.env so $KEY_NAME
         expands inside the shell only — key values never enter Python."""
         env_file = Path.home() / ".hermes" / ".env"
+        # FIX: previously the literal 'Bearer ***' was sent — the key_env
+        # parameter was accepted but never referenced, so every probe
+        # authenticated with garbage and 401'd for healthy providers. Now
+        # $key_env expands from the sourced .env inside the shell.
         cmd = (
             f'set -a; [ -f {env_file} ] && . {env_file}; set +a; '
             f'curl -s -m {int(timeout)} -o - -w "\\n%{{http_code}}" '
-            f'-H "Authorization: Bearer ${{{key_env}}}" '
+            f'-H "Authorization: Bearer ${key_env}" '
             + " ".join(f"'{a}'" for a in extra)
             + f" '{url}'"
         )

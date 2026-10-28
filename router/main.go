@@ -41,7 +41,6 @@ type RouteHealth struct {
 	CooldownTil time.Time
 	HardFailed  bool
 	WarmAt      time.Time
-	Keys        map[string]*KeyHealth
 }
 
 type KeyHealth struct {
@@ -191,12 +190,16 @@ func providerFailed(p *Provider, model string) {
 
 	// Exponential backoff: double for each failure BEYOND the limit
 	// Failure limit=1: failure 1 -> base, failure 2 -> 2x, failure 3 -> 4x, etc.
+	// F6: also cap when max_cooldown_seconds is 0 (default cap 10min).
 	extraFailures := h.Failures - limit
 	for i := 0; i < extraFailures; i++ {
 		cooldown *= 2
-		if cfg.Retry.MaxCooldownSeconds > 0 &&
-			cooldown >= cfg.Retry.MaxCooldownSeconds {
-			cooldown = cfg.Retry.MaxCooldownSeconds
+		maxCap := cfg.Retry.MaxCooldownSeconds
+		if maxCap < 1 {
+			maxCap = 600
+		}
+		if cooldown >= maxCap {
+			cooldown = maxCap
 			break
 		}
 	}
@@ -267,24 +270,6 @@ func providerSucceeded(p *Provider, model string, preferenceName string) {
 			Outcome:  "unhealthy_to_healthy",
 		})
 	}
-}
-
-func providerKeyQuarantined(p *Provider, env string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.keys == nil {
-		p.keys = make(map[string]*KeyHealth)
-	}
-
-	h := p.keys[env]
-	if h == nil {
-		h = &KeyHealth{}
-		p.keys[env] = h
-	}
-
-	h.HardFailed = true
-	h.CooldownTil = time.Time{}
 }
 
 func providerKeySucceeded(p *Provider, env string) {
@@ -580,6 +565,14 @@ func hardFailureRecoveryLoop() {
 						Outcome:  "recovered",
 						Context:  "background",
 					})
+					// A3: emit the health transition for consistency with the
+					// foreground recovery path (providerSucceeded).
+					logRouteEvent(RouteEvent{
+						Event:    "health_transition",
+						Provider: p.Name,
+						Model:    model,
+						Outcome:  "unhealthy_to_healthy",
+					})
 				}
 			}
 		}
@@ -700,14 +693,7 @@ func refreshProviderCatalog(p *Provider) {
 		if status == http.StatusUnauthorized {
 			resp.Body.Close()
 			providerKeyFailed(p, keyEnv)
-			// GAP-005: per-key failure event.
-			logRouteEvent(RouteEvent{
-				Event:    "credential_rotation_signal",
-				Provider: p.Name,
-				KeyEnv:   keyEnv,
-				Outcome:  "key_failed",
-				Status:   status,
-			})
+			// rotation signal emitted inside providerKeyFailed (GAP-005)
 			continue
 		}
 
@@ -833,6 +819,19 @@ func earliestCooldown() time.Duration {
 			}
 
 			d := time.Until(h.CooldownTil)
+			if d > 0 && (earliest == 0 || d < earliest) {
+				earliest = d
+			}
+		}
+
+		// F2: key cooldowns matter too — if every key for a provider is
+		// cooling, the provider cannot serve, and the hold loop would spin
+		// silently until max_hold_seconds instead of surfacing it.
+		for _, kh := range p.keys {
+			if kh == nil || kh.CooldownTil.IsZero() {
+				continue
+			}
+			d := time.Until(kh.CooldownTil)
 			if d > 0 && (earliest == 0 || d < earliest) {
 				earliest = d
 			}
@@ -984,6 +983,9 @@ func classifyFailure(status int, err error) (transient bool, permanent bool) {
 	case status == http.StatusUnauthorized:
 		// 401 = invalid API key, treat as transient (key might be rotated)
 		// Provider-level quarantine would be better but requires more design
+		return true, false
+	case status == http.StatusRequestTimeout:
+		// 408 = upstream stalled waiting for us — transient, retryable.
 		return true, false
 	case status == http.StatusForbidden:
 		return false, true
@@ -1476,6 +1478,15 @@ func streamResponse(
 					requestID,
 					result.err,
 				)
+				// F4: after commit, a read error must still terminate the SSE
+				// stream explicitly — otherwise the client waits forever for a
+				// [DONE] that never comes and reports truncation.
+				if committed {
+					_, _ = w.Write([]byte("\ndata: [DONE]\n\n"))
+					if canFlush {
+						flusher.Flush()
+					}
+				}
 				return result.err
 			}
 
@@ -1506,6 +1517,8 @@ func tryRoute(
 	// GAP-001/003: captured during the upstream call, emitted on route_result.
 	var firstChunkMS int64
 	var retryAfterSeconds int
+	// F7: classify the failure kind for telemetry.
+	errorKind := ""
 
 	// Set routing headers BEFORE upstream call - they must be set before headers are committed
 	w.Header().Set("X-Request-ID", requestID)
@@ -1553,6 +1566,7 @@ func tryRoute(
 			FallbackDepth: fallbackCount,
 			// GAP-003: Retry-After captured from a 429 upstream.
 			RetryAfterSeconds: retryAfterSeconds,
+			ErrorKind:         errorKind,
 		}
 		if fallbackFrom != "" {
 			e.FallbackChain = []string{fallbackFrom, p.Name}
@@ -1653,8 +1667,10 @@ func tryRoute(
 		// outcome:"failure" — indistinguishable from hard failures in
 		// telemetry (AUDIT-008).
 		routeOutcome = "transient"
+		errorKind = "transport"
 		if routeTimedOut {
 			routeOutcome = "timeout"
+			errorKind = "timeout"
 		}
 		providerFailed(p, route.Model)
 		return false, true, err
@@ -1685,6 +1701,16 @@ func tryRoute(
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
+		// F1: capture Retry-After BEFORE returning — this branch returns for
+		// 429s, so the capture must live here, not after it.
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				if secs, perr := strconv.Atoi(ra); perr == nil {
+					retryAfterSeconds = secs
+				}
+			}
+		}
+
 		if resp.StatusCode == http.StatusUnauthorized {
 			providerKeyFailed(p, keyEnv)
 			return false, true, fmt.Errorf(
@@ -1706,6 +1732,7 @@ func tryRoute(
 	}
 
 	// GAP-003: capture Retry-After when the upstream returns 429.
+	// (kept for 1xx/2xx-adjacent paths; the transient branch above handles 429)
 	if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			if secs, perr := strconv.Atoi(ra); perr == nil {
@@ -1778,7 +1805,10 @@ func tryRoute(
 				p.Name,
 				route.Model,
 			)
-			return true, false, err
+			// F8: return success=false — the request did NOT complete, so
+			// the provider must not be pinned as last-known-good. (The
+			// client is already gone; nothing else can be served.)
+			return false, false, err
 		}
 
 		routeOutcome = "stream_error"
@@ -2435,6 +2465,37 @@ func validateConfig() error {
 		if _, err := url.Parse(p.BaseURL); err != nil {
 			return fmt.Errorf("provider[%s]: invalid base_url: %v", p.Name, err)
 		}
+		// F3: duplicate provider names break providerByName lookup silently.
+		for j := 0; j < i; j++ {
+			if cfg.Providers[j].Name == p.Name {
+				return fmt.Errorf("provider[%d]: duplicate provider name '%s'", i, p.Name)
+			}
+		}
+		// F3: key_envs must be non-empty — a provider with no keys can never
+		// serve and would exhaust the chain with 'no usable API key'.
+		envs := providerKeyEnvs(p)
+		if len(envs) == 0 {
+			return fmt.Errorf("provider[%s]: no key_env/key_envs configured", p.Name)
+		}
+	}
+
+	// F3: duplicate model across a preference's routes would make the chain
+	// attempt the same model twice on the same provider.
+	for pi, pref := range cfg.Preferences {
+		seenModel := map[string]bool{}
+		for _, route := range pref.Routes {
+			if seenModel[route.Provider+"/"+route.Model] {
+				return fmt.Errorf("preference[%s]: duplicate route %s/%s",
+					pref.Name, route.Provider, route.Model)
+			}
+			seenModel[route.Provider+"/"+route.Model] = true
+		}
+		_ = pi
+	}
+
+	// F3/A10: strategy must be a known value.
+	if cfg.Strategy != "" && cfg.Strategy != "lkgp" {
+		return fmt.Errorf("strategy '%s' unknown (allowed: '', 'lkgp')", cfg.Strategy)
 	}
 
 	// Validate retry config
@@ -2490,14 +2551,17 @@ func updateMetrics() {
 			if h == nil {
 				continue
 			}
+			// F5 (route level): three-way set so gauges never go stale.
 			if h.HardFailed {
 				routesHardFailed.WithLabelValues(p.Name, model).Set(1)
+				routesInCooldown.WithLabelValues(p.Name, model).Set(0)
+				routesHealthy.WithLabelValues(p.Name, model).Set(0)
+			} else if !h.CooldownTil.IsZero() && time.Now().Before(h.CooldownTil) {
+				routesHardFailed.WithLabelValues(p.Name, model).Set(0)
+				routesInCooldown.WithLabelValues(p.Name, model).Set(1)
+				routesHealthy.WithLabelValues(p.Name, model).Set(0)
 			} else {
 				routesHardFailed.WithLabelValues(p.Name, model).Set(0)
-			}
-			if !h.CooldownTil.IsZero() && time.Now().Before(h.CooldownTil) {
-				routesInCooldown.WithLabelValues(p.Name, model).Set(1)
-			} else {
 				routesInCooldown.WithLabelValues(p.Name, model).Set(0)
 				routesHealthy.WithLabelValues(p.Name, model).Set(1)
 			}
@@ -2506,12 +2570,20 @@ func updateMetrics() {
 			if kh == nil {
 				continue
 			}
+			// F5: explicit three-way set — a key that changes state must
+			// reset the other two gauges, or stale values persist.
 			if kh.HardFailed {
-				keysHardFailed.WithLabelValues(p.Name).Inc()
+				keysHardFailed.WithLabelValues(p.Name).Set(1)
+				keysInCooldown.WithLabelValues(p.Name).Set(0)
+				keysHealthy.WithLabelValues(p.Name).Set(0)
 			} else if !kh.CooldownTil.IsZero() && time.Now().Before(kh.CooldownTil) {
-				keysInCooldown.WithLabelValues(p.Name).Inc()
+				keysHardFailed.WithLabelValues(p.Name).Set(0)
+				keysInCooldown.WithLabelValues(p.Name).Set(1)
+				keysHealthy.WithLabelValues(p.Name).Set(0)
 			} else {
-				keysHealthy.WithLabelValues(p.Name).Inc()
+				keysHardFailed.WithLabelValues(p.Name).Set(0)
+				keysInCooldown.WithLabelValues(p.Name).Set(0)
+				keysHealthy.WithLabelValues(p.Name).Set(1)
 			}
 		}
 		catalogModels.WithLabelValues(p.Name).Set(float64(len(p.catalog)))

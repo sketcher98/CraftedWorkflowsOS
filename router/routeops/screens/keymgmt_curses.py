@@ -91,7 +91,7 @@ class KeyManagementScreen:
                     self.selected_key = min(len(keys) - 1, self.selected_key + 1)
                 return True
             elif key in (27, ord('h'), ord('q'), 10, curses.KEY_ENTER):  # Esc, h, q, Enter
-                self.show_key_detail = False
+                self.show_detail = False
                 self.mode = "list"
                 return True
             elif key == ord('d'):  # Delete key
@@ -113,7 +113,7 @@ class KeyManagementScreen:
                 return True
             elif key in (10, curses.KEY_ENTER):  # Enter
                 if providers:
-                    self.show_key_detail = True
+                    self.show_detail = True
                     self.selected_key = 0
                 return True
             elif key == ord('a'):  # Add key
@@ -128,7 +128,7 @@ class KeyManagementScreen:
             elif key == ord('r'):  # Refresh
                 self._fetch_config()
                 return True
-            elif key == ord('d') and self.show_key_detail:  # Delete (in detail mode)
+            elif key == ord('d') and self.show_detail:  # Delete (in detail mode)
                 self.mode = "confirm_remove"
                 return True
             return False
@@ -300,7 +300,7 @@ class KeyManagementScreen:
                         break
 
                 self.mode = "list"
-                self.show_key_detail = False
+                self.show_detail = False
             except Exception as e:
                 self.message = f"Remove key failed: {e}"
                 self.message_color = curses.color_pair(4)

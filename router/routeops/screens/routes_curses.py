@@ -74,9 +74,10 @@ class RoutesScreen:
             self.editor.test_current_route(
                 self.current_pref_index, self.editor.route_idx)
             return True
-        if key == ord('s'):
+        if key == ord('g'):
             # B-6: toggle routing strategy (configured order <-> LKGP) via
             # the same staged-diff gate as every other config edit.
+            # ('s' is reserved globally for Settings — do not shadow it.)
             self.editor.stage_strategy_toggle()
             return True
 

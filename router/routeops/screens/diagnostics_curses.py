@@ -413,7 +413,7 @@ class DiagnosticsScreen:
                     'status': event.status,
                     'timestamp': event.timestamp
                 })
-            elif event.event_type == "route_fallback":
+            elif event.event_type == "preference_fallback":
                 fallback_events.append({
                     'provider': event.provider,
                     'from_pref': event.from_preference,
