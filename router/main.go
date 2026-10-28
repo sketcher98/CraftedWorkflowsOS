@@ -137,7 +137,13 @@ func providerHealthy(p *Provider, model string) bool {
 	if !h.WarmAt.IsZero() && time.Since(h.WarmAt) < 10*time.Minute {
 		return true
 	}
-	return h.Failures == 0
+	// B-1: a cell is eligible once its cooldown has expired, regardless of
+	// the accumulated Failures counter. Previously this returned
+	// `h.Failures == 0`, which permanently poisoned a cell after a single
+	// failure (Failures only ever reset on success, and success required
+	// eligibility — a deadlock). Cooldown expiry must restore eligibility,
+	// or a transient error kills a route forever.
+	return true
 }
 
 func providerCooldown(p *Provider, model string) time.Duration {
@@ -494,17 +500,29 @@ func hardFailureRecoveryLoop() {
 		cfgMu.RUnlock()
 
 		for _, p := range providers {
+			// B-2: collect hard-failed models WITHOUT holding p.mu across
+			// the probe. tryRecoverHardFailed takes p.mu itself — holding it
+			// here self-deadlocked (non-reentrant Mutex) on the first
+			// hard-failed route, wedging the entire provider forever.
+			var toRecover []string
 			p.mu.Lock()
 			for model, h := range p.routes {
-				if h == nil || !h.HardFailed {
-					continue
+				if h != nil && h.HardFailed {
+					toRecover = append(toRecover, model)
 				}
+			}
+			p.mu.Unlock()
 
+			for _, model := range toRecover {
 				// Try to recover
 				if tryRecoverHardFailed(p, model) {
-					h.HardFailed = false
-					h.Failures = 0
-					h.CooldownTil = time.Time{}
+					p.mu.Lock()
+					if h := p.routes[model]; h != nil {
+						h.HardFailed = false
+						h.Failures = 0
+						h.CooldownTil = time.Time{}
+					}
+					p.mu.Unlock()
 
 					log.Printf(
 						"provider=%s model=%s recovered from hard failure",
@@ -513,15 +531,14 @@ func hardFailureRecoveryLoop() {
 					)
 
 					logRouteEvent(RouteEvent{
-									Event:    "route_recovered",
-									Provider: p.Name,
-									Model:    model,
-									Outcome:  "recovered",
-									Context:  "background",
-								})
+						Event:    "route_recovered",
+						Provider: p.Name,
+						Model:    model,
+						Outcome:  "recovered",
+						Context:  "background",
+					})
 				}
 			}
-			p.mu.Unlock()
 		}
 	}
 }
