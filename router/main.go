@@ -172,6 +172,7 @@ func providerFailed(p *Provider, model string) {
 	defer p.mu.Unlock()
 
 	h := routeHealthLocked(p, model)
+	wasHealthy := !h.HardFailed && (h.CooldownTil.IsZero() || time.Now().After(h.CooldownTil))
 	h.Failures++
 
 	limit := cfg.Retry.FailureLimit
@@ -224,6 +225,18 @@ func providerFailed(p *Provider, model string) {
 		CooldownSeconds:  cooldown,
 		CooldownUntil:    h.CooldownTil.Format(time.RFC3339),
 	})
+
+	// GAP-007: health transition (healthy -> cooldown).
+	if wasHealthy {
+		logRouteEvent(RouteEvent{
+			Event:           "health_transition",
+			Provider:        p.Name,
+			Model:           model,
+			Outcome:         "healthy_to_cooldown",
+			CooldownSeconds: cooldown,
+			CooldownUntil:   h.CooldownTil.Format(time.RFC3339),
+		})
+	}
 }
 
 func providerSucceeded(p *Provider, model string, preferenceName string) {
@@ -245,6 +258,13 @@ func providerSucceeded(p *Provider, model string, preferenceName string) {
 			Model:      model,
 			Outcome:    "recovered",
 			Preference: preferenceName,
+		})
+		// GAP-007: health transition back to healthy.
+		logRouteEvent(RouteEvent{
+			Event:    "health_transition",
+			Provider: p.Name,
+			Model:    model,
+			Outcome:  "unhealthy_to_healthy",
 		})
 	}
 }
@@ -325,6 +345,18 @@ func providerKeyFailed(p *Provider, env string) {
 		h.Failures,
 		cooldown,
 	)
+
+	// GAP-005: a key hitting its failure limit should be rotatable — emit
+	// the signal as visible telemetry so operators can act on it.
+	logRouteEvent(RouteEvent{
+		Event:            "credential_rotation_signal",
+		Provider:         p.Name,
+		KeyEnv:           env,
+		Outcome:          "key_failed",
+		CooldownSeconds:  cooldown,
+		CooldownUntil:    h.CooldownTil.Format(time.RFC3339),
+		FallbackDepth:    h.Failures,
+	})
 }
 
 func selectProviderKey(p *Provider) (string, string, bool) {
@@ -424,6 +456,13 @@ func providerHardFailed(p *Provider, model string, requestID string, preferenceN
 		Provider: p.Name,
 		Model:    model,
 		Outcome:  "permanent",
+	})
+	// GAP-007: health transition to hard-failed.
+	logRouteEvent(RouteEvent{
+		Event:    "health_transition",
+		Provider: p.Name,
+		Model:    model,
+		Outcome:  "unhealthy_to_hardfailed",
 	})
 }
 
@@ -645,6 +684,14 @@ func refreshProviderCatalog(p *Provider) {
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Printf("catalog provider=%s key_env=%s error=%v", p.Name, keyEnv, err)
+			// GAP-004: catalog fetch failure is visible telemetry.
+			logRouteEvent(RouteEvent{
+				Event:    "catalog_skip",
+				Provider: p.Name,
+				KeyEnv:   keyEnv,
+				Outcome:  "error",
+				Error:    err.Error(),
+			})
 			continue
 		}
 
@@ -653,6 +700,14 @@ func refreshProviderCatalog(p *Provider) {
 		if status == http.StatusUnauthorized {
 			resp.Body.Close()
 			providerKeyFailed(p, keyEnv)
+			// GAP-005: per-key failure event.
+			logRouteEvent(RouteEvent{
+				Event:    "credential_rotation_signal",
+				Provider: p.Name,
+				KeyEnv:   keyEnv,
+				Outcome:  "key_failed",
+				Status:   status,
+			})
 			continue
 		}
 
@@ -664,6 +719,13 @@ func refreshProviderCatalog(p *Provider) {
 				resp.Status,
 			)
 			resp.Body.Close()
+			logRouteEvent(RouteEvent{
+				Event:    "catalog_skip",
+				Provider: p.Name,
+				KeyEnv:   keyEnv,
+				Outcome:  "http_error",
+				Status:   status,
+			})
 			return
 		}
 
@@ -701,6 +763,15 @@ func refreshProviderCatalog(p *Provider) {
 			keyEnv,
 			len(catalog),
 		)
+		// GAP-004: successful refresh is visible telemetry.
+		logRouteEvent(RouteEvent{
+			Event:    "catalog_refreshed",
+			Provider: p.Name,
+			KeyEnv:   keyEnv,
+			Outcome:  "ok",
+			Status:   status,
+			Model:    fmt.Sprintf("%d", len(catalog)),
+		})
 		return
 	}
 
@@ -1089,6 +1160,8 @@ func streamResponse(
 	resp *http.Response,
 	ctx context.Context,
 	onCommit func(),
+	firstChunkMS *int64,
+	started time.Time,
 ) error {
 	log.Printf("streamResponse: ENTERED for request %s", w.Header().Get("X-Request-ID"))
 	defer resp.Body.Close()
@@ -1205,6 +1278,10 @@ func streamResponse(
 		w.WriteHeader(resp.StatusCode)
 
 		if len(data) > 0 {
+			if firstChunkMS != nil && *firstChunkMS == 0 {
+				// GAP-001: time-to-first-byte = first downstream write.
+				*firstChunkMS = time.Since(started).Milliseconds()
+			}
 			if _, writeErr := w.Write(data); writeErr != nil {
 				return writeErr
 			}
@@ -1426,6 +1503,9 @@ func tryRoute(
 	started := time.Now()
 	statusCode := 0
 	routeOutcome := "failure"
+	// GAP-001/003: captured during the upstream call, emitted on route_result.
+	var firstChunkMS int64
+	var retryAfterSeconds int
 
 	// Set routing headers BEFORE upstream call - they must be set before headers are committed
 	w.Header().Set("X-Request-ID", requestID)
@@ -1467,6 +1547,17 @@ func tryRoute(
 			LatencyMS:        time.Since(started).Milliseconds(),
 			Status:           statusCode,
 			KeyEnv:           keyEnv,
+			// GAP-001: time-to-first-byte (ms).
+			FirstChunkLatencyMS: firstChunkMS,
+			// GAP-002: fallback depth at the time this route served.
+			FallbackDepth: fallbackCount,
+			// GAP-003: Retry-After captured from a 429 upstream.
+			RetryAfterSeconds: retryAfterSeconds,
+		}
+		if fallbackFrom != "" {
+			e.FallbackChain = []string{fallbackFrom, p.Name}
+		} else {
+			e.FallbackChain = []string{p.Name}
 		}
 		if err != nil {
 			e.Error = err.Error()
@@ -1614,12 +1705,37 @@ func tryRoute(
 		)
 	}
 
+	// GAP-003: capture Retry-After when the upstream returns 429.
+	if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if secs, perr := strconv.Atoi(ra); perr == nil {
+				retryAfterSeconds = secs
+			}
+		}
+	}
+
 	// streamResponse performs SSE preflight before downstream commitment.
 	routeOutcome = "success"
 	err = streamResponse(w, resp, r.Context(), func() {
 		providerKeySucceeded(p, keyEnv)
 		providerSucceeded(p, route.Model, preferenceName)
-	})
+		// GAP-006: the response committed to the client — in-flight requests
+		// are now observable end-to-end (pending via route_attempt, this
+		// event when bytes start flowing downstream).
+		logRouteEvent(RouteEvent{
+			Event:           "route_committed",
+			RequestID:       requestID,
+			Provider:        p.Name,
+			Model:           route.Model,
+			Preference:      preferenceName,
+			Outcome:         "committed",
+			Status:          resp.StatusCode,
+			LatencyMS:       time.Since(started).Milliseconds(),
+			KeyEnv:          keyEnv,
+			FirstChunkLatencyMS: firstChunkMS,
+			FallbackDepth:   fallbackCount,
+		})
+	}, &firstChunkMS, started)
 
 	if err != nil {
 		if errors.Is(err, errFirstEventTimeout) {
@@ -2171,6 +2287,18 @@ type RouteEvent struct {
 	// BuildID: identifies which router build wrote this event (B-12) so
 	// telemetry from different binaries is never mixed up.
 	BuildID     string `json:"build_id,omitempty"`
+	// FirstChunkLatencyMS: time from request start to first downstream SSE
+	// chunk (time-to-first-byte). GAP-001.
+	FirstChunkLatencyMS int64 `json:"first_chunk_latency_ms,omitempty"`
+	// FallbackDepth: how many provider/preference fallbacks occurred before
+	// this result (0 = first route served). GAP-002.
+	FallbackDepth int `json:"fallback_depth,omitempty"`
+	// FallbackChain: ordered list of providers attempted for this request.
+	FallbackChain []string `json:"fallback_chain,omitempty"`
+	// RetryAfterSeconds: Retry-After header value captured from a 429.
+	RetryAfterSeconds int `json:"retry_after_seconds,omitempty"`
+	// KeyEnv already exists; KeyID distinguishes which key served.
+	KeyID string `json:"key_id,omitempty"`
 	Outcome    string `json:"outcome,omitempty"`
 	Status     int    `json:"status,omitempty"`
 	LatencyMS  int64  `json:"latency_ms,omitempty"`
