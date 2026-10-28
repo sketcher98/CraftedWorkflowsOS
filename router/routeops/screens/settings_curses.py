@@ -446,7 +446,7 @@ class SettingsScreen:
         # FIX: the router does NOT hot-reload — loadConfig() runs once at
         # startup. Config edits require a manual restart to take effect.
         lines.append(("After changes: restart the router to apply (loadConfig runs once at startup).", False))
-        lines.append(("Restart with: ~/bin/startr", False))
+        lines.append(("Restart with: ~/CraftedWorkflowsOS/router/scripts/startr", False))
 
         # Clamp cursor
         n_editable = len(editables)

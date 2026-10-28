@@ -93,7 +93,7 @@
 |----|-------------|------|--------|----------|---------------|
 | OP-01 | /health endpoint | curl /health | PRODUCTION-VERIFIED | Live router returns provider health JSON | |
 | OP-02 | JSONL telemetry | router-events.jsonl exists | PRODUCTION-VERIFIED | 3MB+ events file; structured events | |
-| OP-03 | startr launcher | ~/bin/startr | PRODUCTION-VERIFIED | startr runs, verifies binary, health, lock | |
+| OP-03 | startr launcher | ~/CraftedWorkflowsOS/router/scripts/startr | PRODUCTION-VERIFIED | startr runs, verifies binary, health, lock | |
 | OP-04 | Production rollback | Baseline binaries exist | IMPLEMENTED | router.working-baseline-20261006 etc. | Rollback not tested recently |
 | OP-05 | Production baseline hashes | SHA256 recorded | IMPLEMENTED | ROUTER-STATUS.md will record | |
 

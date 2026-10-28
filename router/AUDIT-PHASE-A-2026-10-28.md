@@ -190,7 +190,7 @@ Conclusion: RISK — MEDIUM.
 ### AUDIT-009 — Every log line is written twice
 Category: CODE / TELEMETRY · Area: setupLogging · Status: BUG · Severity: LOW
 Requirement: One log line, one log entry.
-Method: Counted duplicate lines in router.log; read setupLogging() (main.go:2053-2065) and ~/bin/startr.
+Method: Counted duplicate lines in router.log; read setupLogging() (main.go:2053-2065) and ~/CraftedWorkflowsOS/router/scripts/startr.
 Observed Evidence:
 - setupLogging() → log.SetOutput(io.MultiWriter(os.Stderr, f)) where f = router.log
 - startr → nohup ./router >> router.log 2>&1 → stderr also lands in router.log

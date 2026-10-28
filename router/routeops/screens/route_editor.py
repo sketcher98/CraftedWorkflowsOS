@@ -633,7 +633,7 @@ class RouteEditor:
             else:
                 # keep banner + manual command as fallback
                 self.msg = f"SAVED: {reason}, but router restart FAILED: {result.get('detail', '')[:80]}"
-                self.probe_results = [f"⚠ router restart failed — manual: kill $(pgrep -f '^\\./router$'); bash ~/bin/startr"] + (self.probe_results or [])
+                self.probe_results = [f"⚠ router restart failed — manual: kill $(pgrep -f '^\\./router$'); bash ~/CraftedWorkflowsOS/router/scripts/startr"] + (self.probe_results or [])
         except Exception as e:
             self.msg = f"SAVED: {reason}, but router restart errored: {str(e)[:60]}"
 

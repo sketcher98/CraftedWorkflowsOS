@@ -41,7 +41,7 @@ A local HTTP router (`127.0.0.1:8643`) that sits between Hermes and model provid
 - **Network**: Mobile data, variable latency
 - **Process model**: Single router process, background goroutines for catalog refresh + hard-failure recovery
 - **Binary**: `~/CraftedWorkflowsOS/router/router` (~10MB production)
-- **Launcher**: `~/bin/startr` (lock-guarded, health-verified, production-binary-verified)
+- **Launcher**: `~/CraftedWorkflowsOS/router/scripts/startr` (lock-guarded, health-verified, production-binary-verified)
 
 ---
 
@@ -350,7 +350,7 @@ All events share these base fields:
 ## 18. Deployment Requirements
 
 - **Production binary**: `~/CraftedWorkflowsOS/router/router` (built from `main.go`)
-- **Launcher**: `~/bin/startr` — verifies binary identity (cwd=router dir, exe=router binary, size>8MB), port ownership, health
+- **Launcher**: `~/CraftedWorkflowsOS/router/scripts/startr` — verifies binary identity (cwd=router dir, exe=router binary, size>8MB), port ownership, health
 - **Lock file**: `~/.router-locks/router-startr.lock` (flock, prevents concurrent startr)
 - **Safe failure mode**: If production process exists but unhealthy → exit 3, **no auto-restart**
 - **Port conflict**: If 8643 occupied by unknown process → exit 5, manual intervention

@@ -353,7 +353,7 @@ class ConfigEditor:
 
 def router_restart_pending_note() -> str:
     return ("Router restart REQUIRED for config changes to take effect. "
-            "Restart with: bash ~/bin/startr  (after stopping current router)")
+            "Restart with: bash ~/CraftedWorkflowsOS/router/scripts/startr  (after stopping current router)")
 
 
 def restart_router() -> Dict:

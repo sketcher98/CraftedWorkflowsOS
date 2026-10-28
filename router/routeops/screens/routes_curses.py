@@ -646,7 +646,7 @@ class RoutesScreen:
 
         # Restart-needed banner if editor wrote config
         if self.editor.need_restart:
-            term.write(rows - 4, 0, "⚠ CONFIG CHANGED — restart router to apply: kill $(pgrep -f '^\\./router$'); bash ~/bin/startr", curses.color_pair(3) | curses.A_BOLD)
+            term.write(rows - 4, 0, "⚠ CONFIG CHANGED — restart router to apply: kill $(pgrep -f '^\\./router$'); bash ~/CraftedWorkflowsOS/router/scripts/startr", curses.color_pair(3) | curses.A_BOLD)
 
         self._render_key_help(term, rows - 2, cols)
         self._render_disclaimer(term, rows - 1, cols)

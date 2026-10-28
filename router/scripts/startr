@@ -1,0 +1,205 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+# Hardened router lifecycle management for CraftedWorkflowsOS/router
+# Production router: ~/CraftedWorkflowsOS/router/router (10MB, recent build)
+# Port: 8643
+
+ROUTER_DIR="$HOME/CraftedWorkflowsOS/router"
+ROUTER_BIN="$ROUTER_DIR/router"
+PORT=8643
+HEALTH_ENDPOINT="http://127.0.0.1:$PORT/health"
+LOCK_FILE="$HOME/.router-locks/router-startr.lock"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${GREEN}$*${NC}"; }
+log_warn() { echo -e "${YELLOW}$*${NC}"; }
+log_error() { echo -e "${RED}$*${NC}"; }
+
+# Acquire lock to prevent concurrent startr invocations
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    log_error "Another startr invocation is running. Exiting."
+    exit 2
+fi
+
+# Verify production binary identity
+verify_production_binary() {
+    local pid="$1"
+    local cwd
+    local exe
+
+    cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || return 1
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || return 1
+
+    # ALWAYS require exact production working directory
+    [[ "$cwd" == "$ROUTER_DIR" ]] || return 1
+
+    # ALWAYS require exact "./router" command line
+    local cmdline
+    cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' | sed 's/ $//') || return 1
+    [[ "$cmdline" == "./router" ]] || return 1
+
+    # Check executable path: either exact production binary OR legacy deleted Go-build path
+    local is_legacy=false
+    if [[ "$exe" == "$ROUTER_BIN" ]]; then
+        # Exact production binary - verify size directly
+        local size
+        size=$(stat -c%s "$exe" 2>/dev/null) || return 1
+        [[ $size -gt 8000000 ]] || return 1
+    elif [[ "$exe" == /data/data/com.termux/files/usr/tmp/go-build*/b001/exe/router* ]]; then
+        # Legacy deleted Go-build executable - NARROWLY matched pattern
+        # Verify production binary on disk matches expected size
+        local size
+        size=$(stat -c%s "$ROUTER_BIN" 2>/dev/null) || return 1
+        [[ $size -gt 8000000 ]] || return 1
+        is_legacy=true
+    else
+        # Any other executable path is rejected
+        return 1
+    fi
+
+    # Additional health guard for legacy processes
+    if [[ "$is_legacy" == true ]]; then
+        # Verify health endpoint returns expected provider structure
+        local health
+        health=$(curl -sS --max-time 5 "$HEALTH_ENDPOINT" 2>/dev/null) || return 1
+        # Check for expected providers: nvidia, zydit-v1, zydit-v2 (compact JSON)
+        echo "$health" | grep -q '"name":"nvidia"' || return 1
+        echo "$health" | grep -q '"name":"zydit-v1"' || return 1
+        echo "$health" | grep -q '"name":"zydit-v2"' || return 1
+        # All three must be healthy
+        echo "$health" | grep -q '"healthy":true' || return 1
+    fi
+
+    return 0
+}
+
+# Find production router PID
+find_production_pid() {
+    local pids
+    pids=$(pgrep -f '^\./router$' 2>/dev/null) || return 1
+
+    for pid in $pids; do
+        if verify_production_binary "$pid"; then
+            echo "$pid"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# R3: check_port_ownership was a no-op (every path returned 0, nothing
+# verified). Removed — the meaningful gate is check_health below: if the
+# process is the verified production binary AND /health responds, the port
+# is owned by the right router.
+
+# Check HTTP health with retries
+check_health() {
+    local max_time="${1:-10}"
+    local retries="${2:-3}"
+    local delay=1
+
+    for i in $(seq 1 "$retries"); do
+        if curl -sS --max-time "$max_time" "$HEALTH_ENDPOINT" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep "$delay"
+        delay=$((delay * 2))
+    done
+    return 1
+}
+
+# Get health status details
+get_health_details() {
+    curl -sS --max-time 5 "$HEALTH_ENDPOINT" 2>/dev/null || echo '{"error": "health check failed"}'
+}
+
+# Main logic
+main() {
+    cd "$ROUTER_DIR" || { log_error "Cannot cd to $ROUTER_DIR"; exit 1; }
+
+    # Check if production router is already running
+    local existing_pid
+    existing_pid=$(find_production_pid) || existing_pid=""
+
+    if [[ -n "$existing_pid" ]]; then
+        # Production process exists, verify health
+        log_info "Router process found (PID: $existing_pid)"
+
+        if check_health 10 3; then
+            log_info "Router already running on :$PORT"
+            log_info "Health: OK"
+            exit 0
+        else
+            log_warn "Router process exists but is unhealthy."
+            log_warn "Not automatically restarting (safe failure mode)."
+            exit 3
+        fi
+    fi
+
+    # Check if port 8643 is occupied by something else
+    if python3 -c "
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(1)
+try:
+    s.connect(('127.0.0.1', $PORT))
+    s.close()
+    print('occupied')
+except:
+    print('free')
+" | grep -q occupied; then
+        log_error "Port $PORT is occupied by an unknown/unrelated process."
+        log_error "Cannot start production router. Manual intervention required."
+        exit 5
+    fi
+
+    # No production router running, port is free - start it
+    log_info "Starting production router..."
+
+    # R1: sanitize env — CONFIG_FILE / ROUTER_PORT overrides must NEVER
+    # leak from a test/agent session into the production launch. loadConfig()
+    # reads them; a leftover test value would silently start prod on a test
+    # config or port.
+    unset CONFIG_FILE ROUTER_PORT
+
+    # Source environment
+    set -a
+    source "$HOME/.hermes/.env" 2>/dev/null || true
+    set +a
+
+    # Start router
+    nohup ./router >> router.log 2>&1 9>&- &
+    local new_pid=$!
+
+    # Give it time to start
+    sleep 2
+
+    # Verify the started process is our production router
+    if ! verify_production_binary "$new_pid"; then
+        log_error "Started process is not the production router binary."
+        log_error "PID: $new_pid"
+        kill "$new_pid" 2>/dev/null || true
+        exit 6
+    fi
+
+    # Verify health
+    if check_health 15 5; then
+        log_info "Router started successfully on :$PORT"
+        log_info "Health: OK"
+        exit 0
+    else
+        log_error "Router started but :$PORT is not responding healthily."
+        log_error "Check $ROUTER_DIR/router.log for details."
+        kill "$new_pid" 2>/dev/null || true
+        exit 1
+    fi
+}
+
+main "$@"
