@@ -8,10 +8,9 @@
     "max_cooldown_seconds": 120,
     "all_failed_wait_seconds": 10,
     "hard_failed_wait_seconds": 10,
-    "route_timeout_seconds": 300,
+    "route_timeout_seconds": 120,
     "stream_idle_timeout_seconds": 300,
     "first_event_timeout_seconds": 180,
-    "continuation_max": 0,
     "max_hold_seconds": 30
   },
   "preferences": [
@@ -66,6 +65,16 @@
         {
           "provider": "zydit-v2",
           "model": "z-ai/glm-5.3-flash"
+        }
+      ]
+    },
+    {
+      "name": "deepseek-ai/deepseek-v4.1-flash",
+      "context_window": 1048576,
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "deepseek-ai/deepseek-v4.1-flash"
         }
       ]
     }

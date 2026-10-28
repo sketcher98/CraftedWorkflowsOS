@@ -81,9 +81,13 @@ type Config struct {
 	Host                  string       `json:"host"`
 	Port                  int          `json:"port"`
 	CatalogRefreshSeconds int          `json:"catalog_refresh_seconds"`
-	Retry                 RetryConfig  `json:"retry"`
-	Preferences           []Preference `json:"preferences"`
-	Providers             []*Provider  `json:"providers"`
+	// Strategy selects the routing strategy: "" (default, configured order)
+	// or "lkgp" (opt-in). Previously LKGP was applied unconditionally,
+	// silently overriding the configured provider order (AUDIT-005).
+	Strategy    string       `json:"strategy"`
+	Retry       RetryConfig  `json:"retry"`
+	Preferences []Preference `json:"preferences"`
+	Providers   []*Provider  `json:"providers"`
 }
 
 var (
@@ -776,12 +780,26 @@ func earliestCooldown() time.Duration {
 }
 
 type Status struct {
-	Name       string `json:"name"`
-	Healthy    bool   `json:"healthy"`
-	Failures   int    `json:"failures"`
-	Cooldown   string `json:"cooldown,omitempty"`
-	HardFailed bool   `json:"hard_failed"`
-	Catalog    int    `json:"catalog_models"`
+	Name       string        `json:"name"`
+	Healthy    bool          `json:"healthy"`
+	Failures   int           `json:"failures"`
+	Cooldown   string        `json:"cooldown,omitempty"`
+	HardFailed bool          `json:"hard_failed"`
+	Catalog    int           `json:"catalog_models"`
+	// B-7: per-cell state. /health previously reported only a provider-level
+	// boolean that hid dead cells (AUDIT-003) — 5 of 7 cells could be dead
+	// and the provider still showed green.
+	Routes []CellStatus `json:"routes,omitempty"`
+}
+
+// CellStatus is the per-provider×model health for one route.
+type CellStatus struct {
+	Model        string `json:"model"`
+	Healthy      bool   `json:"healthy"`
+	Failures     int    `json:"failures"`
+	HardFailed   bool   `json:"hard_failed"`
+	CooldownUntil string `json:"cooldown_until,omitempty"`
+	Warm         bool   `json:"warm,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -881,6 +899,11 @@ func classifyFailure(status int, err error) (transient bool, permanent bool) {
 	}
 
 	switch {
+	case status >= 200 && status < 300:
+		// 2xx = success — NOT a failure class. Return (false, false) so
+		// tryRoute falls through into streamResponse. (B-9 regression fix:
+		// the default branch must never swallow success into transient.)
+		return false, false
 	case status == http.StatusTooManyRequests:
 		return true, false
 	case status >= 500:
@@ -893,8 +916,20 @@ func classifyFailure(status int, err error) (transient bool, permanent bool) {
 		return true, false
 	case status == http.StatusForbidden:
 		return false, true
+	case status == http.StatusBadRequest, status == 413, status == http.StatusUnprocessableEntity:
+		// B-9: 400/413/422 are permanent client errors — never "success".
+		// Previously the default branch returned (false, false), which made
+		// tryRoute fall through into streamResponse and record outcome
+		// "success" for a 413 (AUDIT-007).
+		return false, true
 	default:
-		return false, false
+		// B-9: any OTHER 4xx is the client's fault → permanent. Unknown codes
+		// must never be silently counted as success.
+		if status >= 400 && status < 500 {
+			return false, true
+		}
+		// Unexpected 2xx/3xx — treat as transient so the route can retry.
+		return true, false
 	}
 }
 
@@ -1522,10 +1557,15 @@ func tryRoute(
 			return false, false, r.Context().Err()
 		}
 
-		providerFailed(p, route.Model)
+		// B-10: transport errors (DNS, connection refused, reset) are
+		// transient, not permanent. Previously they fell through as
+		// outcome:"failure" — indistinguishable from hard failures in
+		// telemetry (AUDIT-008).
+		routeOutcome = "transient"
 		if routeTimedOut {
 			routeOutcome = "timeout"
 		}
+		providerFailed(p, route.Model)
 		return false, true, err
 	}
 
@@ -1612,6 +1652,19 @@ func tryRoute(
 			return false, true, err
 		}
 
+		// B-5: the CLIENT cancelled (user stop / Hermes timeout). This says
+		// nothing about the provider — do NOT cool the cell down.
+		if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+			routeOutcome = "client_abort"
+			statusCode = 200 // stream had committed; client left
+			log.Printf(
+				"provider=%s model=%s client aborted stream (no provider penalty)",
+				p.Name,
+				route.Model,
+			)
+			return true, false, err
+		}
+
 		routeOutcome = "stream_error"
 		// Post-commitment stream failure: cannot replay downstream, but the
 		// cell IS unhealthy — cool it down so the NEXT request skips it
@@ -1670,6 +1723,15 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		requestID,
 	)
 
+	// B-4: request_started — one event per request, usable as a lifecycle
+	// anchor so reconstruction can pair start → result/abort/exhausted.
+	logRouteEvent(RouteEvent{
+		Event:          "request_started",
+		RequestID:      requestID,
+		Preference:     preference.Name,
+		RequestedModel: model,
+	})
+
 	// Keep cycling until a route succeeds or the client cancels.
 	if err := r.Context().Err(); err != nil {
 		return
@@ -1688,10 +1750,11 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		fallbackFrom := ""
 		skippedHardFailed := false
 
-		// LKGP Strategy: try pinned provider first — recomputed PER PREFERENCE so a
-		// preference fallback re-orders the NEXT preference's routes, not the old ones.
+		// Strategy application — OPT-IN via config.json "strategy": "lkgp".
+		// Previously LKGP ran unconditionally and could reorder the configured
+		// provider chain (AUDIT-005). Default "" = honour config order exactly.
 		orderedRoutes := preference.Routes
-		if strategyRegistry != nil {
+		if strategyRegistry != nil && cfg.Strategy == "lkgp" {
 			if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
 				if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
 					// Build dummy targets for the strategy
@@ -1720,6 +1783,14 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					"route provider=%s not configured",
 					route.Provider,
 				)
+				logRouteEvent(RouteEvent{
+					Event:      "route_skipped",
+					RequestID:  requestID,
+					Provider:   route.Provider,
+					Model:      route.Model,
+					Preference: preference.Name,
+					Outcome:    "provider_unconfigured",
+				})
 				continue
 			}
 
@@ -1729,11 +1800,27 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 			if h != nil && h.HardFailed {
 				skippedHardFailed = true
 				p.mu.Unlock()
+				logRouteEvent(RouteEvent{
+					Event:      "route_skipped",
+					RequestID:  requestID,
+					Provider:   p.Name,
+					Model:      route.Model,
+					Preference: preference.Name,
+					Outcome:    "hard_failed",
+				})
 				continue
 			}
 			p.mu.Unlock()
 
 			if !providerHealthy(p, route.Model) {
+				logRouteEvent(RouteEvent{
+					Event:      "route_skipped",
+					RequestID:  requestID,
+					Provider:   p.Name,
+					Model:      route.Model,
+					Preference: preference.Name,
+					Outcome:    "unhealthy",
+				})
 				continue
 			}
 
@@ -1743,6 +1830,14 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					p.Name,
 					route.Model,
 				)
+				logRouteEvent(RouteEvent{
+					Event:      "route_skipped",
+					RequestID:  requestID,
+					Provider:   p.Name,
+					Model:      route.Model,
+					Preference: preference.Name,
+					Outcome:    "catalog_absent",
+				})
 				continue
 			}
 
@@ -1854,6 +1949,16 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// All configured preferences have been exhausted.
+		// B-4: emit the exhaustion event (AUDIT-012) — previously the final
+		// outcome of an exhausted request was invisible in telemetry.
+		logRouteEvent(RouteEvent{
+			Event:      "request_exhausted",
+			RequestID:  requestID,
+			Preference: preference.Name,
+			Model:      model,
+			Outcome:    "exhausted",
+		})
+
 		// C (hold-and-serve): park and wait for a cooldown to expire,
 		// then re-walk every preference from the top. Only emit the
 		// legacy 503 if the hold window itself is exceeded.
@@ -1955,20 +2060,35 @@ func health(w http.ResponseWriter, r *http.Request) {
 		failures := 0
 		hardFailed := false
 		var earliest time.Time
+		cells := make([]CellStatus, 0, len(p.routes))
+		now := time.Now()
 
-		for _, h := range p.routes {
+		for model, h := range p.routes {
 			if h == nil {
 				continue
 			}
 
-			failures += h.Failures
+			var cell CellStatus
+			cell.Model = model
+			cell.Failures = h.Failures
+			cell.HardFailed = h.HardFailed
+			cell.Healthy = !h.HardFailed &&
+				(h.CooldownTil.IsZero() || now.After(h.CooldownTil))
+			if !h.CooldownTil.IsZero() {
+				cell.CooldownUntil = h.CooldownTil.Format(time.RFC3339)
+			}
+			if !h.WarmAt.IsZero() && now.Sub(h.WarmAt) < 10*time.Minute {
+				cell.Warm = true
+			}
+			cells = append(cells, cell)
 
+			failures += h.Failures
 			if h.HardFailed {
 				hardFailed = true
 				healthy = false
+				continue
 			}
-
-			if !h.CooldownTil.IsZero() && time.Now().Before(h.CooldownTil) {
+			if !h.CooldownTil.IsZero() && now.Before(h.CooldownTil) {
 				healthy = false
 				if earliest.IsZero() || h.CooldownTil.Before(earliest) {
 					earliest = h.CooldownTil
@@ -1982,6 +2102,7 @@ func health(w http.ResponseWriter, r *http.Request) {
 			Failures:   failures,
 			HardFailed: hardFailed,
 			Catalog:    len(p.catalog),
+			Routes:     cells,
 		}
 
 		if !earliest.IsZero() {
@@ -2036,12 +2157,20 @@ var eventFileHandle *os.File
 var eventMu sync.Mutex
 
 type RouteEvent struct {
-	Timestamp  string `json:"timestamp"`
+	Timestamp string `json:"timestamp"`
 	Event      string `json:"event"`
 	RequestID  string `json:"request_id,omitempty"`
 	Provider   string `json:"provider,omitempty"`
 	Model      string `json:"model,omitempty"`
 	Preference string `json:"preference,omitempty"`
+	// RequestedModel: the model the client originally asked for (B-4).
+	// Model is the model actually served after substitution.
+	RequestedModel string `json:"requested_model,omitempty"`
+	// ErrorKind classifies transport vs upstream vs policy failures (B-10).
+	ErrorKind   string `json:"error_kind,omitempty"`
+	// BuildID: identifies which router build wrote this event (B-12) so
+	// telemetry from different binaries is never mixed up.
+	BuildID     string `json:"build_id,omitempty"`
 	Outcome    string `json:"outcome,omitempty"`
 	Status     int    `json:"status,omitempty"`
 	LatencyMS  int64  `json:"latency_ms,omitempty"`
@@ -2054,6 +2183,10 @@ type RouteEvent struct {
 	Context         string `json:"context,omitempty"` // "request" or "background"
 }
 
+// buildID is stamped at startup (B-12) so consumers can tell which binary
+// produced an event. Override via -ldflags "-X main.buildID=...".
+var buildID = "dev"
+
 func logRouteEvent(e RouteEvent) {
 	eventMu.Lock()
 	defer eventMu.Unlock()
@@ -2063,6 +2196,7 @@ func logRouteEvent(e RouteEvent) {
 	}
 
 	e.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
+	e.BuildID = buildID
 	_ = json.NewEncoder(eventFileHandle).Encode(e)
 	_ = eventFileHandle.Sync()
 }
@@ -2077,12 +2211,25 @@ func setupLogging() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	// B-11: write ONLY to the log file. The old io.MultiWriter(os.Stderr, f)
+	// plus startr's `nohup ./router >> router.log 2>&1` doubled every line —
+	// stderr was captured by both the MultiWriter AND the shell redirect.
+	// Drop the stderr branch; the file is the single sink.
+	log.SetOutput(f)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 }
 
 func loadConfig() {
-	data, err := os.ReadFile("config.json")
+	// Harness support (Phase C, T-series): allow running the PRODUCTION
+	// binary against an isolated config/port. Default remains config.json
+	// + 8643. CONFIG_FILE was fork-only before — without it the prod binary
+	// could not be exercised on :8644, so every test validated the fork
+	// instead of what is deployed (AUDIT-011).
+	configPath := os.Getenv("CONFIG_FILE")
+	if configPath == "" {
+		configPath = "config.json"
+	}
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -2093,6 +2240,11 @@ func loadConfig() {
 
 	if cfg.Port == 0 {
 		cfg.Port = 8643
+	}
+	if p := os.Getenv("ROUTER_PORT"); p != "" {
+		if port, perr := strconv.Atoi(p); perr == nil && port > 0 {
+			cfg.Port = port
+		}
 	}
 
 	// Validate configuration
