@@ -1,0 +1,74 @@
+[
+  {
+    "id": "N01",
+    "name": "no wrong model substitution",
+    "status": "PASS",
+    "detail": "3 events, models=['moonshotai/kimi-k3']"
+  },
+  {
+    "id": "N02",
+    "name": "no wrong provider attribution",
+    "status": "PASS",
+    "detail": "providers=['mock-nvidia']"
+  },
+  {
+    "id": "N03",
+    "name": "no duplicate route attempt",
+    "status": "PASS",
+    "detail": "1 attempts, 1 unique request_ids"
+  },
+  {
+    "id": "N04",
+    "name": "no stale cooldown",
+    "status": "PASS",
+    "detail": "0 cooldown events, none stale"
+  },
+  {
+    "id": "N05",
+    "name": "no cross-model poisoning",
+    "status": "PASS",
+    "detail": "1 nemotron results, 0 poisoned"
+  },
+  {
+    "id": "N06",
+    "name": "no cross-key poisoning",
+    "status": "PASS",
+    "detail": "1 results, provider survived"
+  },
+  {
+    "id": "N07",
+    "name": "no credential leakage",
+    "status": "PASS",
+    "detail": "no credential values in telemetry"
+  },
+  {
+    "id": "N08",
+    "name": "no request body leakage",
+    "status": "PASS",
+    "detail": "no prompt content in telemetry"
+  },
+  {
+    "id": "N09",
+    "name": "no false recovery",
+    "status": "PASS",
+    "detail": "1 quarantined, 0 recovered"
+  },
+  {
+    "id": "N10",
+    "name": "no false fallback",
+    "status": "PASS",
+    "detail": "0 fallback events (correct)"
+  },
+  {
+    "id": "N11",
+    "name": "no incorrect active-route claim",
+    "status": "PASS",
+    "detail": "attempt precedes result for every request"
+  },
+  {
+    "id": "N12",
+    "name": "no cross-provider poisoning",
+    "status": "PASS",
+    "detail": "quarantined=[]"
+  }
+]

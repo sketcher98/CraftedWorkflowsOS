@@ -40,6 +40,7 @@ type RouteHealth struct {
 	Failures    int
 	CooldownTil time.Time
 	HardFailed  bool
+	WarmAt      time.Time
 	Keys        map[string]*KeyHealth
 }
 
@@ -126,7 +127,17 @@ func providerHealthy(p *Provider, model string) bool {
 		return true
 	}
 
-	return !h.HardFailed && time.Now().After(h.CooldownTil)
+	if h.HardFailed {
+		return false
+	}
+	if !h.CooldownTil.IsZero() && time.Now().Before(h.CooldownTil) {
+		return false
+	}
+	// Warm probe within 10 minutes overrides failure count
+	if !h.WarmAt.IsZero() && time.Since(h.WarmAt) < 10*time.Minute {
+		return true
+	}
+	return h.Failures == 0
 }
 
 func providerCooldown(p *Provider, model string) time.Duration {
@@ -215,6 +226,7 @@ func providerSucceeded(p *Provider, model string, preferenceName string) {
 	h.Failures = 0
 	h.CooldownTil = time.Time{}
 	h.HardFailed = false
+	h.WarmAt = time.Now()
 
 	if wasUnhealthy {
 		logRouteEvent(RouteEvent{

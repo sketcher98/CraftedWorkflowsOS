@@ -1,0 +1,111 @@
+{
+  "host": "127.0.0.1",
+  "port": 8644,
+  "catalog_refresh_seconds": 300,
+  "retry": {
+    "failure_limit": 1,
+    "cooldown_seconds": 5,
+    "max_cooldown_seconds": 60,
+    "all_failed_wait_seconds": 3,
+    "hard_failed_wait_seconds": 10,
+    "route_timeout_seconds": 10,
+    "stream_idle_timeout_seconds": 30,
+    "first_event_timeout_seconds": 10,
+    "continuation_max": 0,
+    "max_hold_seconds": 20
+  },
+  "preferences": [
+    {
+      "name": "minimaxai/minimax-m3.1-flash",
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "minimaxai/minimax-m3.1-flash"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "minimaxai/minimax-m3.1-flash"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "minimaxai/minimax-m3.1-flash"
+        }
+      ]
+    },
+    {
+      "name": "nemotron",
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b"
+        }
+      ]
+    },
+    {
+      "name": "glm-5.3",
+      "routes": [
+        {
+          "provider": "nvidia",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "zydit-v1",
+          "model": "z-ai/glm-5.3"
+        },
+        {
+          "provider": "zydit-v2",
+          "model": "z-ai/glm-5.3"
+        }
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "name": "nvidia",
+      "base_url": "http://127.0.0.1:19990",
+      "key_env": "TEST_KEY_1",
+      "key_envs": [
+        "TEST_KEY_1"
+      ],
+      "models": [
+        "minimaxai/minimax-m3.1-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "z-ai/glm-5.3"
+      ]
+    },
+    {
+      "name": "zydit-v1",
+      "base_url": "http://127.0.0.1:19991",
+      "key_env": "TEST_KEY_1",
+      "key_envs": [
+        "TEST_KEY_1"
+      ],
+      "models": [
+        "minimaxai/minimax-m3.1-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "z-ai/glm-5.3"
+      ]
+    },
+    {
+      "name": "zydit-v2",
+      "base_url": "http://127.0.0.1:19992",
+      "key_env": "TEST_KEY_1",
+      "key_envs": [
+        "TEST_KEY_1"
+      ],
+      "models": [
+        "minimaxai/minimax-m3.1-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "z-ai/glm-5.3"
+      ]
+    }
+  ]
+}

@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-10-28 Session Changes (latest first)
+
+### SPEC #42 Post-Commit Stream Failure — RESOLVED
+- **Verified in test-env**: mock `stream_commit_then_drop` behavior confirmed:
+  1. Upstream sends 1 valid SSE chunk → router commits (writes headers + chunk)
+  2. Upstream goes silent (no more data, no close)
+  3. Router hits `stream_idle_timeout_seconds` (30s test, 300s prod)
+  4. Router terminates stream: sends `data: {"error": {"message": "upstream stream stalled...", "type": "stream_error", "code": "stream_stalled"}}`
+  5. Router sends `data: [DONE]`
+  6. **NO provider fallback after commitment** — per D-006
+- **Client receives**: 200 OK + 1 chunk + stream_error + [DONE]
+- **Hermes interaction**: Needs E2E verification (Spec #36)
+- **Production**: Same logic with 300s idle timeout (configurable via `stream_idle_timeout_seconds`)
+
+---
+
 ## 2026-10-18 Session Changes (latest first)
 
 ### Router core (main.go — LKGP build)
@@ -94,7 +110,8 @@
 | **Routing (preference ladder + provider fallback)** | PRODUCTION-VERIFIED | Live router handles requests; telemetry shows fallback chains |
 | **Multi-key (key_envs + per-key health + inner retry loop)** | **PRODUCTION-VERIFIED** | Production main.go has inner retry loop (lines ~1433-1477) + multi-key catalog refresh; live requests succeed |
 | **SSE preflight (1 MiB, app-error detection)** | IMPLEMENTED BUT NOT FULLY TESTED | test-env main.go lines 870-904; production main.go HAS THIS (1 MiB buffer, app-error detection) |
-| **Stream idle timeout (60s post-header)** | IMPLEMENTED BUT NOT FULLY TESTED | test-env has idleTimer goroutine; production has 60s idle timeout via timer.Reset per chunk |
+| **Stream idle timeout (configurable `stream_idle_timeout_seconds`)** | IMPLEMENTED | test-env has idleTimer goroutine; production has idle timeout via timer.Reset per chunk (300s prod, 30s test) |
+| **Post-commit stream failure (Spec #42)** | **RESOLVED (test-env verified)** | mock `stream_commit_then_drop` verified: 1 chunk → commit → idle timeout → stream_error + [DONE]; NO provider fallback |
 | **Exhaustion handling (503 + Retry-After)** | PRODUCTION-VERIFIED | waitForRecovery returns 503 immediately; background recovery loop runs |
 | **Hard-failure recovery (background probe)** | TESTED | test-env recovery-mock; production has simpler tryRecoverHardFailed |
 | **Catalog (per-provider, multi-key refresh)** | **PRODUCTION-VERIFIED** | Production refreshProviderCatalog iterates providerKeyEnvs() |
@@ -132,11 +149,12 @@
 - 403 quarantine (mock_403)
 - Timeout transient (timeout-mock)
 - SSE preflight application error detection (test-env main.go)
-- Stream idle timeout 60s (test-env streamResponse)
+- Stream idle timeout (test-env streamResponse)
 - Preference fallback (config with 4 preferences)
 - Background hard-failure recovery (recovery-mock)
 - Multi-key catalog refresh (test-env refreshProviderCatalog)
 - E2E Hermes → router → 503 → retry → recovery (e2e_test.py)
+- **Post-commit stream failure (Spec #42)** — mock `stream_commit_then_drop` verified: 1 chunk → commit → idle timeout → stream_error + [DONE]; NO provider fallback
 
 ### IMPLEMENTED BUT NOT FULLY TESTED
 - Production SSE preflight implemented (1 MiB buffer, app-error detection); not production-validated
@@ -145,7 +163,7 @@
 ### UNTESTED
 - Concurrent request handling (no load test)
 - Goroutine leak detection under sustained load
-- Hermes post-commit stream failure behavior (HE-04)
+- Hermes post-commit stream failure behavior (HE-04) — **router behavior verified; Hermes-visible behavior needs E2E**
 - All-provider exhaustion with Hermes retry (HE-02 partial)
 - Matrix test (current test logic cannot force sequential provider failures per cell)
 - Rollback procedure (baselines exist but not exercised)
@@ -165,8 +183,9 @@
 1. ✅ Port test-env multi-key implementation to production main.go
 2. ✅ Rebuild production binary, verify hashes, test with startr
 3. ⏳ Run focused production tests for SSE preflight + multi-key (requires live 401 or simulated)
-4. Design + execute Hermes post-commit failure validation test (HE-04)
+4. **Design + execute Hermes post-commit failure validation test (HE-04)** — router behavior verified, need Hermes E2E
 5. Redesign matrix test infrastructure (deterministic provider failure injection)
+6. **SPEC #42 (Post-commit stream failure): RESOLVED** — verified in test-env with mock `stream_commit_then_drop`
 
 **Operational**:
 - Monitor nvidia key health (currently healthy per /health)

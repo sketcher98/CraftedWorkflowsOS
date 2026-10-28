@@ -3,6 +3,7 @@ package strategy
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // LKGPState holds the last-known-good provider per preference
@@ -28,18 +29,36 @@ func (l *LKGPState) Get(preference string) string {
 	return l.pins[preference]
 }
 
-// Set pins a provider for a preference
+// Set pins a provider for a preference and records the timestamp
 func (l *LKGPState) Set(preference, provider string) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.pins[preference] = provider
+	l.mu.Unlock()
+
+	l.muAge.Lock()
+	l.age[preference] = time.Now().Unix()
+	l.muAge.Unlock()
 }
 
 // Delete removes a pin
 func (l *LKGPState) Delete(preference string) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	delete(l.pins, preference)
+	l.mu.Unlock()
+
+	l.muAge.Lock()
+	delete(l.age, preference)
+	l.muAge.Unlock()
+}
+
+// IsPinExpired checks if a pin has expired
+func (l *LKGPState) IsPinExpired(preference string, maxAge int64) bool {
+	l.muAge.RLock()
+	defer l.muAge.RUnlock()
+	if age, ok := l.age[preference]; ok {
+		return time.Now().Unix()-age > maxAge
+	}
+	return true // no age = expired
 }
 
 // LKGPConfig holds configuration for the LKGP strategy
@@ -95,28 +114,7 @@ func (s *LKGPStrategy) Apply(ctx context.Context, targets []Target, req *Request
 	return moveToFront(targets, pinned)
 }
 
-// GetPinned returns the pinned provider for a preference
-func (s *LKGPState) GetPinned(preference string) string {
-	return s.Get(preference)
-}
-
-// SetPin pins a provider for a preference
-func (s *LKGPState) SetPin(preference, provider string) {
-	s.Set(preference, provider)
-}
-
-// DeletePin removes a pin
-func (s *LKGPState) DeletePin(preference string) {
-	s.Delete(preference)
-}
-
-// IsPinExpired checks if a pin has expired
-func (s *LKGPState) IsPinExpired(preference string) bool {
-	// TODO: implement age check
-	return false
-}
-
-// GetPinned returns the pinned provider for a preference
+// getPinned returns the pinned provider for a preference
 func (s *LKGPStrategy) getPinned(preference string) string {
 	return s.state.Get(preference)
 }
@@ -131,10 +129,9 @@ func (s *LKGPStrategy) DeletePin(preference string) {
 	s.state.Delete(preference)
 }
 
-// IsPinExpired checks if a pin has expired
+// isPinExpired checks if a pin has expired
 func (s *LKGPStrategy) isPinExpired(preference string) bool {
-	// TODO: implement age check using s.config.MaxPinAge
-	return false
+	return s.state.IsPinExpired(preference, s.config.MaxPinAge)
 }
 
 // moveToFront moves the pinned provider to the front of the list

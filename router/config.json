@@ -16,20 +16,20 @@
   },
   "preferences": [
     {
-      "name": "z-ai/glm-5.3",
+      "name": "minimaxai/minimax-m3.1-flash",
       "context_window": 1048576,
       "routes": [
         {
           "provider": "nvidia",
-          "model": "z-ai/glm-5.3"
+          "model": "minimaxai/minimax-m3.1-flash"
         },
         {
           "provider": "zydit-v1",
-          "model": "z-ai/glm-5.3"
+          "model": "minimaxai/minimax-m3.1-flash"
         },
         {
           "provider": "zydit-v2",
-          "model": "z-ai/glm-5.3"
+          "model": "minimaxai/minimax-m3.1-flash"
         }
       ]
     },
@@ -52,56 +52,20 @@
       ]
     },
     {
-      "name": "glm-5.3",
+      "name": "z-ai/glm-5.3-flash",
       "context_window": 1048576,
       "routes": [
         {
           "provider": "nvidia",
-          "model": "z-ai/glm-5.3"
+          "model": "z-ai/glm-5.3-flash"
         },
         {
           "provider": "zydit-v1",
-          "model": "z-ai/glm-5.3"
+          "model": "z-ai/glm-5.3-flash"
         },
         {
           "provider": "zydit-v2",
-          "model": "z-ai/glm-5.3"
-        }
-      ]
-    },
-    {
-      "name": "nemotron",
-      "context_window": 1048576,
-      "routes": [
-        {
-          "provider": "nvidia",
-          "model": "nvidia/nemotron-3-ultra-550b-a55b"
-        },
-        {
-          "provider": "zydit-v1",
-          "model": "nvidia/nemotron-3-ultra-550b-a55b"
-        },
-        {
-          "provider": "zydit-v2",
-          "model": "nvidia/nemotron-3-ultra-550b-a55b"
-        }
-      ]
-    },
-    {
-      "name": "minimaxai/minimax-m3.1-flash",
-      "context_window": 1048576,
-      "routes": [
-        {
-          "provider": "nvidia",
-          "model": "minimaxai/minimax-m3.1-flash"
-        },
-        {
-          "provider": "zydit-v1",
-          "model": "minimaxai/minimax-m3.1-flash"
-        },
-        {
-          "provider": "zydit-v2",
-          "model": "minimaxai/minimax-m3.1-flash"
+          "model": "z-ai/glm-5.3-flash"
         }
       ]
     }

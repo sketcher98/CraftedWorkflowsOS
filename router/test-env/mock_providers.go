@@ -107,6 +107,7 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "moonshotai/kimi-k3"},
+				{"id": "minimaxai/minimax-m3.1-flash"},
 				{"id": "z-ai/glm-5.3"},
 				{"id": "nvidia/nemotron-3-ultra-550b-a55b"},
 				{"id": "deepseek-ai/deepseek-v4.1-flash"},

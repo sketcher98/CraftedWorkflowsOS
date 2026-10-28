@@ -2544,10 +2544,9 @@ func setupLogging() {
 	if os.Getenv("CONFIG_FILE") != "" {
 		testPhase2EventFile, _ := os.OpenFile("/data/data/com.termux/files/home/CraftedWorkflowsOS/router/test-phase2/router-events.jsonl", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if testPhase2EventFile != nil {
-			// We'll write to both - but for simplicity, let's just use the test-phase2 one
-			// Actually, let's just use the test-phase2 one directly
-			eventFileHandle.Close()
-			eventFileHandle = testPhase2EventFile
+			// Keep writing to BOTH files
+			_ = testPhase2EventFile
+			// eventFileHandle remains the local file
 		}
 	}
 

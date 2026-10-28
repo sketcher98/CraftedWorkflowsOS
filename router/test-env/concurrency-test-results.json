@@ -1,0 +1,38 @@
+[
+  {
+    "id": "",
+    "passed": true,
+    "detail": "10/10 succeeded, 0 failed",
+    "duration_ms": 93
+  },
+  {
+    "id": "",
+    "passed": true,
+    "detail": "20/20 succeeded",
+    "duration_ms": 185
+  },
+  {
+    "id": "",
+    "passed": true,
+    "detail": "4/4 models succeeded concurrently",
+    "duration_ms": 51
+  },
+  {
+    "id": "",
+    "passed": false,
+    "detail": "kimi: 3/3 failed (expected), nemo: 3/3 succeeded",
+    "duration_ms": 130
+  },
+  {
+    "id": "",
+    "passed": false,
+    "detail": "0/6 succeeded",
+    "duration_ms": 68
+  },
+  {
+    "id": "",
+    "passed": false,
+    "detail": "0/4 succeeded with key rotation",
+    "duration_ms": 35
+  }
+]

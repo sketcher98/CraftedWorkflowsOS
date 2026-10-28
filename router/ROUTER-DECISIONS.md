@@ -257,6 +257,34 @@
 
 **Decision:** Document and enforce the following lessons from past failures to prevent recurrence.
 
+---
+
+## D-027: Post-Commit Stream Failure Contract Resolved (Spec #42)
+
+**Decision:** The post-commit stream failure contract (Spec #42, §21) is resolved and verified.
+
+**Verification:** test-env mock `stream_commit_then_drop` behavior:
+1. Upstream sends 1 valid SSE chunk → router commits (writes headers + chunk)
+2. Upstream goes silent (no more data, no close)
+3. Router hits `stream_idle_timeout_seconds` (30s test, 300s prod)
+4. Router terminates stream: sends `data: {"error": {"message": "upstream stream stalled...", "type": "stream_error", "code": "stream_stalled"}}`
+5. Router sends `data: [DONE]`
+6. **NO provider fallback after commitment** — per D-006
+
+**Client receives:** 200 OK + 1 chunk + stream_error + [DONE]
+
+**Hermes interaction:** Needs E2E verification (Spec #36)
+
+**Rationale:** Router behavior verified; Hermes-visible behavior needs E2E test.
+
+**Status:** **RESOLVED** — router logic complete, test-env verified, production has same logic with longer timeouts.
+
+---
+
+## D-026: Historical Lessons (from Canonical Spec §41)
+
+**Decision:** Document and enforce the following lessons from past failures to prevent recurrence.
+
 **Lessons:**
 
 1. **Mistake 1 — HTTP 200 ≠ Success**: Providers return HTTP 200 with SSE application errors (`{"error":{"code":503}}`). Must inspect SSE pre-commit. Never trust status code alone.

@@ -51,10 +51,11 @@
 | SSE-04 | No downstream commitment on SSE app error | Preflight returns error before WriteHeader | TESTED (test-env) | appErr triggers resp.Body.Close() and return before commit | Production main.go implements this |
 | SSE-05 | Provider fallback after SSE app error | tryRoute treats appErr as transient | TESTED (test-env) | routeOutcome=transient, providerFailed, fallback continues | Production main.go implements this |
 | SSE-06 | 60s pre-header timeout | ResponseHeaderTimeout = route_timeout_seconds | TESTED | test-env 30s; production 60s; timeout-mock validates | |
-| SSE-07 | 60s post-header idle timeout | streamResponse idleTimer reset on read | TESTED | test-env streamResponse lines 939-1022; mock stream_90s_gap | Production main.go has 60s idle timeout via timer.Reset per chunk |
-| SSE-08 | Post-commit stream failure = stream_error | tryRoute line 1203-1211 | PROVEN | routeOutcome=stream_error, success=true, retryable=false | |
-| SSE-09 | Connection termination semantics | mock stream_failure (Hijacker) | TESTED | mock_providers.go stream_failure behavior | |
-| SSE-10 | Hermes interpretation of post-commit failure | E2E test observation | UNTESTED | No Hermes behavior validation test exists | KNOWN GAP - critical |
+|| SSE-07 | Post-header idle timeout | streamResponse idleTimer reset on read | TESTED | test-env streamResponse lines 939-1022; mock stream_90s_gap | Production main.go has idle timeout via timer.Reset per chunk (configurable `stream_idle_timeout_seconds`) |
+|| SSE-08 | Post-commit stream failure = stream_error | tryRoute line 1203-1211 | PROVEN | routeOutcome=stream_error, success=true, retryable=false | |
+|| SSE-09 | Connection termination semantics | mock stream_failure (Hijacker) | TESTED | mock_providers.go stream_failure behavior | |
+|| SSE-10 | Post-commit stream failure contract (Spec #42) | mock `stream_commit_then_drop` | **TESTED (test-env)** | mock sends 1 chunk then hangs; router hits idle timeout, returns stream_error + [DONE]; NO provider fallback | Hermes interaction needs E2E test (HE-04) |
+|| SSE-11 | Hermes interpretation of post-commit failure | E2E test observation | UNTESTED | No Hermes behavior validation test exists | KNOWN GAP - critical |
 
 ---
 
@@ -101,7 +102,7 @@
 ## Summary
 
 **PROVEN / PRODUCTION-VERIFIED**: 30 (PK-01, PK-12 promoted)
-**TESTED**: 12
+**TESTED**: 13 (SSE-10 added)
 **PARTIALLY PROVEN**: 3
 **UNTESTED**: 8
 **KNOWN FAILURE**: 0
@@ -115,3 +116,5 @@
 5. Live key rotation untested (no production 401 observed to verify multi-key rotation)
 
 **Phase 1B**: COMPLETE ✅ (2026-10-10)
+
+**SPEC #42 (Post-commit stream failure)**: **RESOLVED** — verified in test-env with mock `stream_commit_then_drop`

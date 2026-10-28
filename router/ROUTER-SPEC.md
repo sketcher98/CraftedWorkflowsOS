@@ -24,6 +24,8 @@ A local HTTP router (`127.0.0.1:8643`) that sits between Hermes and model provid
 - **1 MiB SSE preflight cap** (`1 << 20` bytes).
 - **60s pre-header timeout** (ResponseHeaderTimeout).
 - **60s post-header stream idle timeout** (reset on each successful read).
++ **Pre-header timeout**: `route_timeout_seconds` (config, default 60s production, 30s test)
++ **Post-header stream idle timeout**: `stream_idle_timeout_seconds` (config, default 60s fixed in code, 30s test-env)
 - **Client cancellation must NOT be counted as provider instability**.
 - **Same request ID preserved across router fallback chain**.
 - **Router must NOT manufacture inbound requests**.
@@ -166,9 +168,20 @@ Current preferences (config.json):
 
 **Post-commit** (after `WriteHeader`):
 - Streams bytes directly to client
-- **60s idle timeout** (reset on each read)
+- **Idle timeout**: `stream_idle_timeout_seconds` (config, default 60s production, 30s test-env) — reset on each read
 - On idle timeout / read error / EOF: log `stream_error`, **NO provider fallback**
 - **Client cancellation** (context done): log, close upstream, **NO provider fallback**, **NO instability marking**
+
+**Post-Commit Stream Failure Contract (Spec #42)**:
+- **Verified in test-env** with mock `stream_commit_then_drop`:
+  1. Upstream sends 1 valid SSE chunk → router commits (writes headers + chunk)
+  2. Upstream goes silent (no more data, no close)
+  3. Router hits `stream_idle_timeout_seconds` (30s test, 300s prod)
+  4. Router terminates stream: sends `data: {"error": {"message": "upstream stream stalled...", "type": "stream_error", "code": "stream_stalled"}}`
+  5. Router sends `data: [DONE]`
+  6. **NO provider fallback after commitment** — per spec
+- Client receives: 200 OK + 1 chunk + stream_error + [DONE]
+- Hermes interaction: **needs E2E verification** (Spec #36)
 
 ---
 
@@ -180,7 +193,7 @@ Current preferences (config.json):
 - **No fallback after commitment** (headers written to client)
 - **Timeouts**:
   - Pre-header: `ResponseHeaderTimeout` = `route_timeout_seconds` (config, default 60s production, 30s test)
-  - Post-header idle: 60s fixed
+  - Post-header idle: `stream_idle_timeout_seconds` (config, default 60s production, 30s test-env)
 - **Client cancellation** → immediate return, no retry, no telemetry pollution
 
 ---
@@ -317,6 +330,7 @@ All events share these base fields:
 - `success` — return valid SSE stream
 - `stream_30s_gap` / `stream_90s_gap` — SSE with idle gaps
 - `stream_failure` — connection termination after headers
+- `stream_commit_then_drop` — sends 1 SSE chunk then hangs forever (tests Spec #42 post-commit stream failure)
 
 **Test matrix** (see ROUTER-TEST-MATRIX.md)
 
@@ -348,11 +362,12 @@ All events share these base fields:
 
 A router change is **PRODUCTION-VERIFIED** only when:
 1. All focused unit tests pass (401, 403, 404, 429, 5xx, timeout, stream_idle, stream_precommit_error)
-2. E2E test passes: Hermes → router → 503 → Hermes retry → recovery
-3. Production router runs stably under real traffic
-4. Telemetry matches expected event sequences
-5. No goroutine leaks, no mutex contention under load
-6. Rollback tested and documented
+2. **Post-commit stream failure test passes** (Spec #42) — mock `stream_commit_then_drop` verified in test-env
+3. E2E test passes: Hermes → router → 503 → Hermes retry → recovery
+4. Production router runs stably under real traffic
+5. Telemetry matches expected event sequences
+6. No goroutine leaks, no mutex contention under load
+7. Rollback tested and documented
 
 ---
 
