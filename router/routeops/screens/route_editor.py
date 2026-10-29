@@ -258,11 +258,11 @@ class RouteEditor:
             return
         if getattr(self, "bench", None) is None:
             self.bench = []
-        if len(self.bench) >= 4:
-            self.mb_result = "bench full (4 slots) — run it (c from providers)"
+        if len(self.bench) >= 10:
+            self.mb_result = "bench full (10 slots) — run it (c from providers)"
             return
         self.bench.append((self.mb_prov, self.mb_models[self.mb_idx]))
-        self.mb_result = (f"bench slot {len(self.bench)}/4: "
+        self.mb_result = (f"bench slot {len(self.bench)}/10: "
                            f"{self.mb_prov}/{self.mb_models[self.mb_idx]}")
 
     # ---------------------------------------------------- test bench

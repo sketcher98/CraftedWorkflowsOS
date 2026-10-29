@@ -383,15 +383,15 @@ class RoutesScreen:
             # Bench contents — not just a count: show what is queued
             slots = getattr(ed, "bench", []) or []
             if slots:
-                lines.append(f"  BENCH ({len(slots)}/4):")
+                lines.append(f"  BENCH ({len(slots)}/10):")
                 for b, (pn, mdl) in enumerate(slots):
                     cur = " ◀" if (pn == ed.mb_prov and mdl == (ed.mb_models[ed.mb_idx] if ed.mb_models else None)) else ""
                     lines.append(f"    [{b+1}] {pn} / {mdl}{cur}")
             else:
-                lines.append("  BENCH (0/4) — empty: [c] adds this model")
+                lines.append("  BENCH (0/10) — empty: [c] adds this model")
             lines.append(f"  [c] adds '{ed.mb_models[ed.mb_idx] if ed.mb_models else '—'}' to bench")
         elif ed.mode == "test_bench":
-            lines.append("TEST BENCH — up to 4 provider/model pairs")
+            lines.append("TEST BENCH — up to 10 provider/model pairs")
             lines.append("")
             slots = getattr(ed, "bench", []) or []
             if not slots:
