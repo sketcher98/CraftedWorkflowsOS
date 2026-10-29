@@ -38,8 +38,6 @@ class DiagnosticsScreen:
                 self._dangling_cache = None  # force rescan on tab entry
             elif self.current_tab == 5:
                 self._metrics_cache = None  # force refresh on tab entry
-            elif self.current_tab == 6:
-                self._full_index = None
             return True
 
         if key in (curses.KEY_LEFT, ord('h')):
@@ -49,8 +47,6 @@ class DiagnosticsScreen:
                 self._dangling_cache = None
             elif self.current_tab == 5:
                 self._metrics_cache = None
-            elif self.current_tab == 6:
-                self._full_index = None
             return True
 
         if key in (curses.KEY_RIGHT, ord('l')):
@@ -60,8 +56,6 @@ class DiagnosticsScreen:
                 self._dangling_cache = None
             elif self.current_tab == 5:
                 self._metrics_cache = None
-            elif self.current_tab == 6:
-                self._full_index = None
             return True
 
         if key in (curses.KEY_UP, ord('k')):
@@ -382,25 +376,26 @@ class DiagnosticsScreen:
     def _ensure_full_index(self):
         """Build/refresh the full-file HistoryIndex. The FIRST build runs
         on a daemon thread — a full scan of 40k+ lines must never freeze
-        the TUI. Returns the (possibly not-yet-scanned) index."""
+        the TUI. The (empty) index shell is always created synchronously,
+        so this NEVER returns None; only the scan is async."""
         import time as _time
         from routeops.adapters.history_index import HistoryIndex
         from routeops.config import ROUTER_EVENTS_JSONL
         now = _time.time()
-        if getattr(self, "_full_index", None) is None and \
-                not getattr(self, "_full_indexing", False):
-            self._full_indexing = True
-            self._full_last = now
+        if getattr(self, "_full_index", None) is None:
             self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
-            import threading
+            self._full_last = now
+            if not getattr(self, "_full_indexing", False):
+                self._full_indexing = True
+                import threading
 
-            def build():
-                try:
-                    self._full_index.refresh()
-                finally:
-                    self._full_indexing = False
+                def build():
+                    try:
+                        self._full_index.refresh()
+                    finally:
+                        self._full_indexing = False
 
-            threading.Thread(target=build, daemon=True).start()
+                threading.Thread(target=build, daemon=True).start()
         elif not getattr(self, "_full_indexing", False) and \
                 now - getattr(self, "_full_last", 0) > 5:
             self._full_index.refresh()
@@ -830,34 +825,10 @@ class DiagnosticsScreen:
         event set (request_started/exhausted, client_abort, catalog_*,
         credential_rotation_signal, route_committed, health_transition,
         route_skipped) alongside the core route events."""
-        import time
-        from routeops.adapters.history_index import HistoryIndex
-        from routeops.config import ROUTER_EVENTS_JSONL
-
         lines = []
         w = width - 4
 
-        now = time.time()
-        # First build runs ASYNC (full-file scan) — never freeze the TUI.
-        if self._full_index is None and not getattr(self, "_full_indexing", False):
-            self._full_indexing = True
-            self._full_last = now
-            self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
-            import threading
-
-            def build():
-                try:
-                    self._full_index.refresh()
-                finally:
-                    self._full_indexing = False
-
-            threading.Thread(target=build, daemon=True).start()
-        elif not getattr(self, "_full_indexing", False) and \
-                (now - getattr(self, "_full_last", 0)) > 10:
-            self._full_index.refresh()
-            self._full_last = now
-
-        idx = self._full_index
+        idx = self._ensure_full_index()
         lines.append("EVENT TYPES — full router-events.jsonl (all events)")
         lines.append("─" * w)
         lines.append("")
