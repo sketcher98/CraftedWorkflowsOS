@@ -379,20 +379,44 @@ class DiagnosticsScreen:
 
     # ------------------------------------------------- full-file index
 
+    def _ensure_full_index(self):
+        """Build/refresh the full-file HistoryIndex. The FIRST build runs
+        on a daemon thread — a full scan of 40k+ lines must never freeze
+        the TUI. Returns the (possibly not-yet-scanned) index."""
+        import time as _time
+        from routeops.adapters.history_index import HistoryIndex
+        from routeops.config import ROUTER_EVENTS_JSONL
+        now = _time.time()
+        if getattr(self, "_full_index", None) is None and \
+                not getattr(self, "_full_indexing", False):
+            self._full_indexing = True
+            self._full_last = now
+            self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
+            import threading
+
+            def build():
+                try:
+                    self._full_index.refresh()
+                finally:
+                    self._full_indexing = False
+
+            threading.Thread(target=build, daemon=True).start()
+        elif not getattr(self, "_full_indexing", False) and \
+                now - getattr(self, "_full_last", 0) > 5:
+            self._full_index.refresh()
+            self._full_last = now
+        return self._full_index
+
     def _full_results(self) -> List:
         """Body route_result events from the FULL-FILE index (D2).
 
         Replaces the 500-event memory window so diagnostics totals are true
-        totals, not a shrinking snapshot."""
-        from routeops.adapters.history_index import HistoryIndex
-        from routeops.config import ROUTER_EVENTS_JSONL
-        if getattr(self, "_full_index", None) is None:
-            self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
-            self._full_index.refresh()
-        elif getattr(self, "_full_last", 0) < __import__("time").time() - 5:
-            self._full_index.refresh()
-        self._full_last = __import__("time").time()
-        return [e for e in self._full_index.query("results")
+        totals, not a shrinking snapshot. First build is async — returns
+        [] until the scan lands."""
+        idx = self._ensure_full_index()
+        if idx is None or getattr(self, "_full_indexing", False):
+            return []
+        return [e for e in idx.query("results")
                 if e.event_type == "route_result"]
 
     def _build_latency_lines(self, width: int) -> List[str]:
@@ -492,7 +516,7 @@ class DiagnosticsScreen:
                     'cooldown': event.cooldown_seconds,
                     'timestamp': event.timestamp
                 })
-        for event in self._full_index.query("fallbacks"):
+        for event in self._ensure_full_index().query("fallbacks"):
             if event.event_type == "preference_fallback":
                 fallback_events.append({
                     'provider': event.provider,
