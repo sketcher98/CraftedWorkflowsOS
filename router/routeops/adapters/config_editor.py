@@ -207,6 +207,16 @@ class ConfigEditor:
 
     # ------------------------------------------------------- strategy knob
 
+    def current_strategy(self) -> str:
+        """Current routing strategy from config.json: 'lkgp' or '' (configured
+        order). Returns '' on any read failure — the UI should show the
+        default, never crash."""
+        try:
+            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+            return "lkgp" if cfg.get("strategy") == "lkgp" else ""
+        except Exception:
+            return ""
+
     def set_strategy(self, strategy: str) -> Tuple[Path, Path]:
         """Set the routing strategy ("" = configured order, "lkgp" = LKGP).
 

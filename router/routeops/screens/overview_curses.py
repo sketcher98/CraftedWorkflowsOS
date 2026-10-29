@@ -849,6 +849,15 @@ class OverviewScreen:
         elif proc and proc.identity == "PRODUCTION":
             lines.append(f"Uptime: starting...   {uptime_indicator}")
 
+        # Routing strategy (live config read)
+        try:
+            from routeops.adapters.config_editor import ConfigEditor as _CE
+            strat = _CE().current_strategy()
+        except Exception:
+            strat = ""
+        strat_attr = curses.color_pair(5) | curses.A_BOLD
+        lines.append([(f"Strategy: {'LKGP' if strat else 'configured order'}", strat_attr)])
+
         return [line[:w] for line in lines]
 
     def _render_disclaimer(self, term, y: int, cols: int) -> None:
