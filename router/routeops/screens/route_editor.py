@@ -412,6 +412,14 @@ class RouteEditor:
             self.probe_results = [f"provider '{name}' already exists"]
             self.msg = ""
             return
+        # R5: verify the key_env var actually exists in ~/.hermes/.env
+        # before we stage a provider that would never authenticate.
+        env_path = Path.home() / ".hermes" / ".env"
+        if not env_path.exists() or key_env not in env_path.read_text(errors="replace"):
+            self.mode = "result"
+            self.probe_results = [f"key_env '{key_env}' not found in ~/.hermes/.env"]
+            self.msg = ""
+            return
         # live-probe before staging
         probe = self.ed.probe_catalog(base_url, key_env, timeout=15)
         note = (f"probe: {len(probe['models'])} models" if probe["ok"]
@@ -700,9 +708,11 @@ class RouteEditor:
         self.msg = f"testing {route['provider']}/{route['model']} ..."
         r = self.ed.test_key(prov["base_url"], prov.get("key_env", ""),
                              route["model"])
-        self.probe_results = [f"{route['provider']}/{route['model']}: "
-                              + ("OK — key works" if r["ok"]
-                                 else f"FAIL {r['detail']}")]
+        # R9: separate state — never write into probe_results (search uses
+        # that; a route test must not clobber a pending search).
+        self.route_test_result = [f"{route['provider']}/{route['model']}: "
+                                  + ("OK — key works" if r["ok"]
+                                     else f"FAIL {r['detail']}")]
         self.msg = "test complete"
 
     def cancel(self):

@@ -208,7 +208,7 @@ class OverviewScreen:
     def _render_key_help_clipped(self, write, y: int, cols: int) -> None:
         """Render key help with clipping."""
         if 0 <= y < cols:
-            help_text = "[p] Providers  [r] Routes  [y] History  [d] Diagnostics  [s] Settings  [q] Quit  [↑/↓] Scroll  [←/→] Screen"
+            help_text = "[p] Providers  [r] Routes  [h] History  [d] Diagnostics  [s] Settings  [q] Quit  [↑/↓] Scroll  [←/→] Screen"
             write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
 
     def _render_disclaimer_clipped(self, write, y: int, cols: int) -> None:
@@ -894,7 +894,7 @@ class OverviewScreen:
 
     def _render_key_help(self, term, y: int, cols: int) -> None:
         """Render key help at bottom."""
-        help_text = "[p] Providers  [r] Routes  [y] History  [d] Diagnostics  [s] Settings  [q] Quit  [↑/↓] Scroll  [←/→] Screen"
+        help_text = "[p] Providers  [r] Routes  [h] History  [d] Diagnostics  [s] Settings  [q] Quit  [↑/↓] Scroll  [←/→] Screen"
         term.write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
 
 

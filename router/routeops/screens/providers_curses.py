@@ -11,7 +11,7 @@ from routeops.models.provider import ProviderHealth
 from routeops.tui.bars import (
     pct_bar, pct_subbar, pct_label, tier_color, tier_icon, hardfail_icon,
     provider_rollup, provider_routes, cooldown_text, BAR_CELLS,
-    verdict, status_from_verdict, health_display,
+    verdict, status_from_verdict, health_display, cell_display,
 )
 
 
@@ -53,6 +53,9 @@ class ProvidersScreen:
             else:
                 self.selected_index = max(0, self.selected_index - 1)
                 self._adjust_scroll(len(providers))
+            # P1: navigation invalidates a stale test banner
+            self.test_result = None
+            self.test_lines = None
             return True
 
         if key in (curses.KEY_DOWN, ord('j')):
@@ -61,6 +64,9 @@ class ProvidersScreen:
             else:
                 self.selected_index = min(max_index, self.selected_index + 1)
                 self._adjust_scroll(len(providers))
+            # P1: navigation invalidates a stale test banner
+            self.test_result = None
+            self.test_lines = None
             return True
 
         if key in (10, curses.KEY_ENTER):  # Enter
@@ -120,7 +126,7 @@ class ProvidersScreen:
             else:
                 lines.append(f"  [{i}] {kenv:<44} ✗ FAIL {r.get('error','')[:30]}")
         verdict = "OK" if any_ok else "ALL KEYS DEAD"
-        self.test_result = f"KEY TEST {name}: {verdict} — {len(key_envs)} pool(s):"
+        self.test_result = f"CATALOG PROBE {name}: {verdict} — {len(key_envs)} pool(s):"
         self.test_lines = lines
 
     test_result = None
@@ -140,8 +146,8 @@ class ProvidersScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
-        # Title bar
-        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=test  [m]=keys  [i]=per-key  [h/Esc] Back"
+        # Title bar — P8: h is now the global History key, not 'back'
+        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe keys  [m]=keys  [i]=per-key  [Esc] Back"
         term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
@@ -213,7 +219,10 @@ class ProvidersScreen:
                         continue
                     pct, ok_t, fail_t, _ab = provider_rollup(self.app_state, name)
                     v = verdict(pct, ok_t + fail_t)
-                    if v == "healthy":
+                    # P4: a zero-traffic provider renders green NO DATA YET in
+                    # the rows; the summary must count that as OK, not
+                    # Degraded — rows and summary must agree.
+                    if v in ("healthy", "no_data"):
                         n_ok += 1
                     else:
                         n_deg += 1
@@ -264,7 +273,6 @@ class ProvidersScreen:
                 (f" 0 routes in any preference", curses.A_DIM),
             ]
             return segs
-
         # ONE shared verdict drives the bar, the icon AND the status word —
         # '0.0% ○ HEALTHY' is impossible by construction.
         in_cd = not health.healthy and not health.hard_failed
@@ -296,11 +304,28 @@ class ProvidersScreen:
             (f"{icon} ", ic),
             (f"{status:<12} ", st_color),
             (f" fails:{failures:<2} ", 0),
+            # P7: surface client-abort count — a provider with many aborts
+            # is not failing, and hiding it hid a real signal.
+            (f" aborts:{_abort:<2} " if _abort else "", 0),
             (f"{cd:>7}  ", 0),
             (f"models:{models:<3} ", 0),
             (f"keys:{keys}", 0),
         ]
         return segs
+
+    # P6: full-file event source — same pattern as Diagnostics, so the
+    # provider detail drawer shows real totals, not the 500-event window.
+    def _full_provider_events(self, provider_name: str) -> List:
+        from routeops.adapters.history_index import HistoryIndex
+        from routeops.config import ROUTER_EVENTS_JSONL
+        if getattr(self, "_full_index", None) is None:
+            self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
+            self._full_index.refresh()
+        elif getattr(self, "_full_last", 0) < __import__("time").time() - 5:
+            self._full_index.refresh()
+        self._full_last = __import__("time").time()
+        return [e for e in self._full_index._events
+                if e.provider == provider_name]
 
     def _build_detail_lines(self, pm, width: int):
         """Build detail lines for provider. Model-health and recent-event rows
@@ -380,26 +405,13 @@ class ProvidersScreen:
         # Per-cell health from /health routes[] (B-7) — the router now
         # reports every provider×model cell individually. This is the
         # ground truth that the provider-level green used to hide.
+        # Q1/P2: shared cell_display renderer — same visuals as Routes.
         cells = getattr(pm.health, "cells", ()) or ()
         if cells:
             lines.append("ROUTER CELL HEALTH (from /health routes[]):")
             for cell in cells:
                 c_short = cell.model.split("/")[-1][:24]
-                if cell.hard_failed:
-                    c_icon, c_color = "✗", curses.color_pair(4) | curses.A_BOLD
-                    c_status = "HARD-FAILED"
-                elif not cell.healthy and cell.cooldown_until:
-                    c_icon, c_color = "◐", curses.color_pair(3)
-                    c_status = f"COOLDOWN until {cell.cooldown_until.strftime('%H:%M:%S')}"
-                elif not cell.healthy:
-                    c_icon, c_color = "○", curses.color_pair(4)
-                    c_status = "UNHEALTHY"
-                elif cell.warm:
-                    c_icon, c_color = "●", curses.color_pair(2)
-                    c_status = "HEALTHY (warm)"
-                else:
-                    c_icon, c_color = "●", curses.color_pair(2)
-                    c_status = "HEALTHY"
+                c_icon, c_status, c_color = cell_display(cell)
                 seg_rows[len(lines)] = [
                     ("  ", 0),
                     (c_icon, c_color),
@@ -476,8 +488,8 @@ class ProvidersScreen:
         lines.append("RECENT EVENTS (newest first):")
         from datetime import datetime as _dt
         _now = _dt.now().astimezone()
-        prov_events = [e for e in self.app_state.recent_events
-                       if e.provider == pm.config.name]
+        # P6: full-file events, not the 500-event memory window
+        prov_events = self._full_provider_events(pm.config.name)
         CYAN = curses.color_pair(5)
         GREEN = curses.color_pair(2)
         RED = curses.color_pair(4)

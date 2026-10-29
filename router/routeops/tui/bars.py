@@ -203,6 +203,23 @@ def hardfail_icon() -> Tuple[str, int]:
     return "✗", RED() | BOLD()
 
 
+def cell_display(cell) -> Tuple[str, str, int]:
+    """One shared renderer for a router per-cell (B-7) health object.
+
+    Returns (icon, status_label, color) — used by the Providers detail drawer
+    and the Routes matrix so the two can never disagree (Q1).
+    """
+    if cell.hard_failed:
+        return "✗", "HARD-FAILED", RED() | BOLD()
+    if not cell.healthy and cell.cooldown_until:
+        return "◐", f"COOLDOWN until {cell.cooldown_until.strftime('%H:%M:%S')}", YELLOW()
+    if not cell.healthy:
+        return "○", "UNHEALTHY", RED()
+    if cell.warm:
+        return "●", "HEALTHY (warm)", GREEN()
+    return "●", "HEALTHY", GREEN()
+
+
 def provider_routes(app_state, provider_name: str) -> int:
     """Number of routes (across all preferences) that reference this provider.
     Zero = provider is configured but unrouted — 'HEALTHY' would be a lie."""

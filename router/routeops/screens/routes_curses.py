@@ -310,7 +310,9 @@ class RoutesScreen:
                 return True
             return True
         if ed.mode in ("confirm_delete", "diff"):
-            if key in (ord('y'), ord('Y')):
+            # R2: Enter and y both confirm (Settings uses Enter; keep y as
+            # the legacy alias), Esc/n cancel.
+            if key in (10, 13, curses.KEY_ENTER, ord('y'), ord('Y')):
                 if ed.mode == "confirm_delete":
                     ed.exec_delete()
                 else:
@@ -475,7 +477,10 @@ class RoutesScreen:
         elif ed.mode == "result":
             lines.append(ed.msg[:cols - 6] if ed.msg else "")
             lines.append("")
-            lines.extend([r[:cols - 6] for r in ed.probe_results[:rows - 8]])
+            # R9: route-test results live in route_test_result; search/probe
+            # results stay in probe_results.
+            src = getattr(ed, "route_test_result", None) or ed.probe_results
+            lines.extend([r[:cols - 6] for r in src[:rows - 8]])
             lines.append("")
 
         # --- action bar per mode (persistently visible, like overview) ---
@@ -490,8 +495,8 @@ class RoutesScreen:
             "km_add":       "[type]=env var name   [Enter]=stage   [Esc]=back",
             "model_browser": "[j/k]=select model   [t]=test   [a]=route it   [c]=add to bench   [Esc]=close",
             "test_bench":   "[r]=run all slots   [x]=clear   [Esc]=close",
-            "confirm_delete": "[y]=DELETE   [n/Esc]=cancel",
-            "diff":         "[y]=write to config.json (backup auto-made)   [n/Esc]=discard",
+            "confirm_delete": "[Enter/y]=DELETE   [n/Esc]=cancel",
+            "diff":         "[Enter/y]=write to config.json (backup auto-made)   [n/Esc]=discard",
             "result":       "[any key]=close",
         }[ed.mode]
 
@@ -632,10 +637,11 @@ class RoutesScreen:
             term.write(my, 2, "│ ", curses.color_pair(1))
             lx = 4
             for text, attr in [("Legend: ", curses.A_DIM),
-                               ("●", curses.color_pair(2)), ("=healthy  ", curses.A_DIM),
+                               ("●", curses.color_pair(2)), ("=healthy/never-yet  ", curses.A_DIM),
                                ("◐", curses.color_pair(3)), ("=degraded  ", curses.A_DIM),
-                               ("○", curses.color_pair(4)), ("=unknown  ", curses.A_DIM),
-                               ("·", curses.A_DIM), ("=not configured", curses.A_DIM)]:
+                               ("○", curses.color_pair(4)), ("=failing  ", curses.A_DIM),
+                               ("·", curses.A_DIM), ("=not configured  ", curses.A_DIM),
+                               ("(cells: JSONL when present, else /health)", curses.A_DIM)]:
                 if lx + len(text) > w + 1:
                     break
                 term.write(my, lx, text, attr)
