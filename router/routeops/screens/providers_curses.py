@@ -525,18 +525,22 @@ class ProvidersScreen:
             term.write(rows - 1, 0, "[y]=commit  [n/Esc]=discard"[:cols], curses.color_pair(3) | curses.A_BOLD)
             return
 
-        # Title bar — context-dependent: home shows list actions; detail
-        # shows the provider name (the detail body already carries its own
-        # action hint line).
+        # Title line — context-dependent: home shows list actions; detail
+        # shows the provider name. Same grammar as Settings/Diagnostics:
+        # title @3, hint right-aligned, ruled below.
         from routeops.tui.render_std import render_header, render_box
         y = render_header(term.write, self.app_state, y, cols, rows)
 
         if self.show_detail and self.app_state.providers:
             provider_name = self._selected_provider_row()["name"]
-            title = f"● PROVIDERS — DETAIL: {provider_name}"
+            title = f"PROVIDERS — DETAIL: {provider_name}"
+            hint = "[t]=probe keys  [m]=key management  [Esc]=back"
         else:
-            title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [x]=disable/enable  [d]=del  [Esc] Back"
-        term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
+            title = f"PROVIDERS  [{len(self.app_state.providers)} providers]"
+            hint = "[Enter]=detail  [t]=probe  [a]=add  [x]=disable/enable  [d]=del  [Esc]=back"
+        term.write(y, 3, title, curses.A_BOLD | curses.color_pair(1))
+        term.write(y, cols - len(hint) - 1, hint[:cols - 2],
+                   curses.color_pair(5) | curses.A_DIM)
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
