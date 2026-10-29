@@ -25,9 +25,12 @@ class ProvidersScreen:
         self.show_detail = False
         self.detail_scroll = 0
         # provider-management inline overlays
-        self.mode = "closed"      # closed | add_prov | confirm_del
+        self.mode = "closed"      # closed | add_prov | confirm_del | prov_diff | confirm_dis
         self.input_buf = ""
         self.overlay_msg = ""
+        self.pending_cfg = None    # staged provider change awaiting diff review
+        self.pending_diff = []
+        self.pending_reason = ""
         # add-provider wizard state (mirrors Hermes' custom endpoint wizard)
         self.wiz_step = 0     # 0 url,1 key,2 verifying,3 model,4 name,5 confirm
         self.wiz_url = ""
@@ -64,10 +67,23 @@ class ProvidersScreen:
 
         if self.mode == "confirm_del":
             if key in (ord('y'), ord('Y')):
-                self._remove_selected_provider()
+                self._stage_remove_selected()
                 return True
             if key in (27, ord('n'), ord('N')):
                 self.mode = "closed"
+                return True
+            return True
+
+        if self.mode == "prov_diff":
+            # staged provider change review: y commits, n/Esc discards
+            if key in (ord('y'), ord('Y'), 10, 13, curses.KEY_ENTER):
+                self._commit_pending_provider()
+                return True
+            if key in (27, ord('n'), ord('N')):
+                self.pending_cfg = None
+                self.pending_diff = []
+                self.mode = "closed"
+                self.overlay_msg = "cancelled — nothing written"
                 return True
             return True
 
@@ -76,7 +92,7 @@ class ProvidersScreen:
                 self.detail_scroll = max(0, self.detail_scroll - 1)
             else:
                 self.selected_index = max(0, self.selected_index - 1)
-                self._adjust_scroll(len(providers))
+                self._adjust_scroll(len(self._provider_rows()))
             # P1: navigation invalidates a stale test banner
             self.test_result = None
             self.test_lines = None
@@ -86,21 +102,23 @@ class ProvidersScreen:
             if self.show_detail:
                 self.detail_scroll += 1
             else:
-                self.selected_index = min(max_index, self.selected_index + 1)
-                self._adjust_scroll(len(providers))
+                self.selected_index = min(len(self._provider_rows()) - 1, self.selected_index + 1)
+                self._adjust_scroll(len(self._provider_rows()))
             # P1: navigation invalidates a stale test banner
             self.test_result = None
             self.test_lines = None
             return True
 
         if key in (10, curses.KEY_ENTER):  # Enter
-            if not self.show_detail and providers:
+            row = self._selected_provider_row()
+            if not self.show_detail and row["name"] and not row["disabled"]:
                 self.show_detail = True
                 self.detail_scroll = 0
             return True
 
         if key == ord('t'):  # probe selected provider (home AND detail)
-            if providers:
+            row = self._selected_provider_row() if not self.show_detail else {"name": providers[self.selected_index] if providers else ""}
+            if row["name"]:
                 self._test_selected(providers)
             return True
 
@@ -111,10 +129,15 @@ class ProvidersScreen:
                 self.overlay_msg = ""
             return True
 
+        if key == ord('x'):  # toggle disable/enable (selected row)
+            if self.mode == "closed" and not self.show_detail:
+                self._stage_disable_selected()
+            return True
+
         if key == ord('d'):  # delete provider (home)
-            if not self.show_detail and providers:
+            if not self.show_detail and self._provider_rows():
                 self.mode = "confirm_del"
-                self.overlay_msg = providers[self.selected_index]
+                self.overlay_msg = self._selected_provider_row()["name"]
             return True
 
         if key in (27, ord('h'), ord('q')):  # Esc, h, q
@@ -243,14 +266,53 @@ class ProvidersScreen:
         except Exception as e:
             self.overlay_msg = f"save failed: {str(e)[:80]}"
 
-    def _remove_selected_provider(self):
-        """Remove the selected provider — refused while any preference routes
-        to it. Commits via ConfigEditor."""
-        from routeops.adapters.config_editor import ConfigEditor
+    def _provider_rows(self) -> List[dict]:
+        """All providers — active + disabled (from config disabled_providers).
+        Cached 2s. Each row: {name, base_url, key_env, disabled}."""
+        now = __import__("time").time()
+        if getattr(self, "_rows_cache", None) is not None and \
+           now - getattr(self, "_rows_at", 0) < 2:
+            return self._rows_cache
+        rows = []
         try:
+            from routeops.adapters.config_editor import ConfigEditor
+            cfg = ConfigEditor().load()
+            dis = {p.get("name") for p in cfg.get("disabled_providers", [])}
+            for p in cfg.get("providers", []):
+                rows.append({"name": p.get("name", "?"),
+                             "base_url": p.get("base_url", ""),
+                             "key_env": next(iter(p.get("key_envs") or []), p.get("key_env", "")),
+                             "disabled": False})
+            for p in cfg.get("disabled_providers", []):
+                rows.append({"name": p.get("name", "?"),
+                             "base_url": p.get("base_url", ""),
+                             "key_env": next(iter(p.get("key_envs") or []), p.get("key_env", "")),
+                             "disabled": True})
+            rows.sort(key=lambda r: (r["disabled"], r["name"]))
+        except Exception:
+            rows = [{"name": n, "base_url": "", "key_env": "", "disabled": False}
+                    for n in self.app_state.providers]
+        self._rows_cache = rows
+        self._rows_at = now
+        return rows
+
+    def _selected_provider_row(self) -> dict:
+        rows = self._provider_rows()
+        if not (0 <= self.selected_index < len(rows)):
+            return {"name": "", "disabled": False}
+        return rows[self.selected_index]
+
+    def _stage_remove_selected(self):
+        """Stage removal of the selected provider -> diff review."""
+        row = self._selected_provider_row()
+        name = row["name"]
+        if not name:
+            self.mode = "closed"
+            return
+        try:
+            from routeops.adapters.config_editor import ConfigEditor
             ce = ConfigEditor()
             cfg = ce.load()
-            name = self._sorted_providers()[self.selected_index]
             for pref in cfg.get("preferences", []):
                 if any(r.get("provider") == name for r in pref.get("routes", [])):
                     self.overlay_msg = (f"cannot remove '{name}': still routed by "
@@ -260,15 +322,84 @@ class ProvidersScreen:
             before = len(cfg.get("providers", []))
             cfg["providers"] = [p for p in cfg.get("providers", [])
                                 if p.get("name") != name]
-            if len(cfg["providers"]) == before:
-                self.overlay_msg = f"provider '{name}' not found"
-            else:
-                ce.commit(cfg, f"remove provider '{name}'")
-                self.overlay_msg = f"removed '{name}'"
-            self.mode = "closed"
+            cfg["disabled_providers"] = [p for p in cfg.get("disabled_providers", [])
+                                         if p.get("name") != name]
+            if len(cfg.get("providers", [])) == before and not row["disabled"]:
+                self.overlay_msg = f"provider '{name}' not found (active)"
+                self.mode = "closed"
+                return
+            self.pending_reason = f"remove provider '{name}'"
+            self._prepare_diff(cfg)
         except Exception as e:
-            self.overlay_msg = f"remove failed: {e}"
+            self.overlay_msg = f"stage failed: {str(e)[:80]}"
             self.mode = "closed"
+
+    def _stage_disable_selected(self):
+        """Stage disable/enable toggle for the selected provider -> diff review."""
+        row = self._selected_provider_row()
+        name = row["name"]
+        if not name:
+            self.mode = "closed"
+            return
+        try:
+            from routeops.adapters.config_editor import ConfigEditor
+            ce = ConfigEditor()
+            cfg = ce.load()
+            dis = cfg.setdefault("disabled_providers", [])
+            if row["disabled"]:
+                # ENABLE: move back from disabled_providers into providers
+                entry = next((d for d in dis if d.get("name") == name),
+                             {"name": name, "key_env": row["key_env"]})
+                if "base_url" not in entry:
+                    entry["base_url"] = row["base_url"]
+                cfg["disabled_providers"] = [d for d in dis if d.get("name") != name]
+                if not any(p.get("name") == name for p in cfg.get("providers", [])):
+                    cfg.setdefault("providers", []).append(entry)
+                self.pending_reason = f"ENABLE provider '{name}'"
+            else:
+                # DISABLE: refuse while routed; move provider -> disabled
+                blocked_by = [p.get("name") for p in cfg.get("preferences", [])
+                              if any(r.get("provider") == name for r in p.get("routes", []))]
+                if blocked_by:
+                    self.overlay_msg = (f"cannot disable '{name}': still routed by "
+                                        f"preferences: {', '.join(blocked_by)}")
+                    self.mode = "closed"
+                    return
+                entry = next((p for p in cfg.get("providers", [])
+                              if p.get("name") == name), {"name": name})
+                cfg["providers"] = [p for p in cfg.get("providers", [])
+                                    if p.get("name") != name]
+                if not any(d.get("name") == name for d in dis):
+                    dis.append(entry)
+                self.pending_reason = f"DISABLE provider '{name}'"
+            self._prepare_diff(cfg)
+        except Exception as e:
+            self.overlay_msg = f"stage failed: {str(e)[:80]}"
+            self.mode = "closed"
+
+    def _prepare_diff(self, cfg: dict):
+        """Build diff vs current config -> enter prov_diff mode."""
+        from routeops.adapters.config_editor import ConfigEditor
+        try:
+            old = ConfigEditor().load()
+            self.pending_diff = ConfigEditor().diff_summary(old, cfg)
+        except Exception as e:
+            self.pending_diff = [f"diff error: {e}"]
+        self.pending_cfg = cfg
+        self.mode = "prov_diff"
+        self.input_buf = ""
+
+    def _commit_pending_provider(self):
+        from routeops.adapters.config_editor import ConfigEditor
+        try:
+            ConfigEditor().commit(self.pending_cfg, reason=self.pending_reason)
+            self.overlay_msg = f"SAVED: {self.pending_reason}"
+        except Exception as e:
+            self.overlay_msg = f"SAVE FAILED: {str(e)[:80]}"
+        self.pending_cfg = None
+        self.pending_diff = []
+        self._rows_cache = None
+        self.mode = "closed"
 
     def _render_wiz(self, term, y: int, rows: int, cols: int) -> None:
         """Render the add-provider wizard (step by step)."""
@@ -366,6 +497,15 @@ class ProvidersScreen:
             y += 1
             term.write(y, 2, f"Remove provider '{self.overlay_msg}'?  [y]=yes  [n/Esc]=no", curses.color_pair(4) | curses.A_BOLD)
             return
+        if self.mode == "prov_diff":
+            # staged change review — diff lines + y/n confirm
+            term.write(y, 0, ("┌ STAGED CHANGE (" + self.pending_reason[:40] + ") ──────────────────────┐")[:cols], curses.color_pair(5))
+            y += 1
+            for line in self.pending_diff[: rows - y - 3]:
+                term.write(y, 2, line[: cols - 6], curses.color_pair(5))
+                y += 1
+            term.write(rows - 1, 0, "[y]=commit  [n/Esc]=discard"[:cols], curses.color_pair(3) | curses.A_BOLD)
+            return
 
         # Title bar — context-dependent: home shows list actions; detail
         # shows the provider name (the detail body already carries its own
@@ -374,7 +514,7 @@ class ProvidersScreen:
             provider_name = self._sorted_providers()[self.selected_index]
             title = f"● PROVIDERS — DETAIL: {provider_name}"
         else:
-            title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [d]=delete  [Esc] Back"
+            title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [x]=disable/enable  [d]=del  [Esc] Back"
         term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
@@ -414,18 +554,25 @@ class ProvidersScreen:
             self._render_detail_box(term, y, cols, f"DETAIL: {provider_name}",
                                     detail_lines, seg_lines)
         else:
-            # Provider list — routed-first ordering, rows as colored segments
-            providers = self._sorted_providers()
+            # Provider list — active first, disabled dimmed + marked.
+            rows_all = self._provider_rows()
             visible_rows = rows - y - 3
 
             shown = 0
-            for i in range(self.scroll_offset, min(self.scroll_offset + visible_rows, len(providers))):
-                name = providers[i]
-                pm = self.app_state.providers[name]
-                segs = self._format_provider_segs(name, pm, cols - 2)
+            for i in range(self.scroll_offset, min(self.scroll_offset + visible_rows, len(rows_all))):
+                row = rows_all[i]
+                name = row["name"]
+                pm = self.app_state.providers.get(name)
+                if pm is None:
+                    segs = [(f"{name:<22}", curses.A_DIM),
+                            (f"[DISABLED]", curses.color_pair(4) | curses.A_BOLD)]
+                else:
+                    segs = self._format_provider_segs(name, pm, cols - 2)
+                    if row["disabled"]:
+                        segs = [(t, a | curses.A_DIM) for t, a in segs]
+                        segs.append((f" [DISABLED]", curses.color_pair(4) | curses.A_BOLD))
 
                 if i == self.selected_index:
-                    # Selected: keep segment colors, invert the row background
                     x = 0
                     for text, attr in segs:
                         term.write(y, x, text[:cols - x], attr | curses.color_pair(9) | curses.A_BOLD)
@@ -443,11 +590,17 @@ class ProvidersScreen:
             # Summary line — SAME accounting as the rendered rows. Counting by
             # /health alone made the summary claim 'OK: 3' while two rows
             # rendered DEGRADED — the summary must match what is on screen.
-            n_total = len(providers)
+            n_total = len(rows_all)
             if n_total:
-                n_ok = n_cool = n_hard = n_noroute = n_deg = 0
-                for name in providers:
-                    pm = self.app_state.providers[name]
+                n_ok = n_cool = n_hard = n_noroute = n_deg = n_dis = 0
+                for row in rows_all:
+                    name = row["name"]
+                    if row["disabled"]:
+                        n_dis += 1
+                        continue
+                    pm = self.app_state.providers.get(name)
+                    if pm is None:
+                        continue
                     h = pm.health
                     if provider_routes(self.app_state, name) == 0:
                         n_noroute += 1
@@ -467,7 +620,7 @@ class ProvidersScreen:
                         n_ok += 1
                     else:
                         n_deg += 1
-                routed_total = n_total - n_noroute
+                routed_total = n_total - n_noroute - n_dis
                 summary = f"Total: {n_total}  Routed: {routed_total}  OK: {n_ok}"
                 if n_deg:
                     summary += f"  Degraded: {n_deg}"
@@ -475,6 +628,8 @@ class ProvidersScreen:
                     summary += f"  Cool: {n_cool}"
                 if n_hard:
                     summary += f"  Hard-failed: {n_hard}"
+                if n_dis:
+                    summary += f"  Disabled: {n_dis}"
                 if n_noroute:
                     summary += f"  No-route: {n_noroute}"
                 if shown < n_total:
@@ -483,8 +638,8 @@ class ProvidersScreen:
                 y += 1
 
             # Scroll indicator
-            if len(providers) > visible_rows:
-                indicator = f"  ↑↓ {self.scroll_offset + 1}-{min(self.scroll_offset + visible_rows, len(providers))} of {len(providers)}"
+            if len(rows_all) > visible_rows:
+                indicator = f"  ↑↓ {self.scroll_offset + 1}-{min(self.scroll_offset + visible_rows, len(rows_all))} of {len(rows_all)}"
                 term.write(y, 0, indicator[:cols], curses.color_pair(5))
 
     def _format_provider_segs(self, name: str, pm, cols: int) -> List:

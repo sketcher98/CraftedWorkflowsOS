@@ -325,109 +325,18 @@ class RouteEditor:
     # ---------------------------------------------------- provider mgmt
 
     def open_prov_mgmt(self):
-        """Provider management: list providers, enable/disable/remove/add."""
+        """Provider management (CRUD moved to Providers screen; this now
+        only offers model browser + test bench for the selected provider)."""
         self.mode = "prov_mgmt"
         self.pick_idx = 0
-        self.msg = "j/k=select  space=disable/enable  r=remove  a=add  Esc=close"
+        self.msg = "j/k=select  m=model browser  c=test bench  Esc=close"
 
     def _cfg_provs(self, cfg=None):
         c = cfg if cfg is not None else self.ed.load()
         return c.get("providers", [])
 
-    def _disabled_set(self, cfg=None):
-        c = cfg if cfg is not None else self.ed.load()
-        return {p["name"] for p in c.get("disabled_providers", [])}
-
-    def toggle_provider_disable(self):
-        cfg = self.ed.load()
-        provs = self._cfg_provs(cfg)
-        if not (0 <= self.pick_idx < len(provs)):
-            return
-        name = provs[self.pick_idx]["name"]
-        dis = cfg.setdefault("disabled_providers", [])
-        if any(d.get("name") == name for d in dis):
-            # ENABLE: move back from disabled_providers into providers
-            cfg["disabled_providers"] = [d for d in dis if d.get("name") != name]
-            entry = next((d for d in dis if d.get("name") == name),
-                         {"name": name})
-            cfg["providers"].append(entry)
-            self.msg = f"'{name}' staged: ENABLE"
-        else:
-            # DISABLE: remove from active providers (router cannot route to it),
-            # keep definition in disabled_providers for one-keypress re-enable.
-            blocked_by = [p["name"] for p in cfg["preferences"]
-                          if any(r["provider"] == name for r in p["routes"])]
-            if blocked_by:
-                self.mode = "result"
-                self.probe_results = [
-                    f"cannot disable '{name}': still routed by preferences: "
-                    + ", ".join(blocked_by),
-                    "remove those routes first (e on the preference)"]
-                return
-            entry = provs[self.pick_idx]
-            cfg["providers"] = [p for p in provs if p["name"] != name]
-            dis.append(entry)
-            self.msg = f"'{name}' staged: DISABLE (removed from router on next restart)"
-        self._stage(cfg, f"toggle provider '{name}'")
-
-    def remove_provider(self):
-        cfg = self.ed.load()
-        provs = self._cfg_provs(cfg)
-        if not (0 <= self.pick_idx < len(provs)):
-            return
-        name = provs[self.pick_idx]["name"]
-        # block removal if any active preference routes to it
-        for pref in cfg["preferences"]:
-            if any(r["provider"] == name for r in pref["routes"]):
-                self.mode = "result"
-                self.probe_results = [f"cannot remove '{name}': still routed by "
-                                      f"preference '{pref['name']}' — remove that route first"]
-                self.msg = ""
-                return
-        cfg["providers"] = [p for p in provs if p["name"] != name]
-        self._stage(cfg, f"remove provider '{name}'")
-
-    def open_prov_add(self):
-        self.mode = "prov_add"
-        self.input_buf = ""
-        self.msg = "format: name base_url key_env  (space-separated)"
-
-    def add_provider(self, line: str):
-        parts = line.split()
-        if len(parts) != 3:
-            self.mode = "result"
-            self.probe_results = ["need exactly: name base_url key_env"]
-            self.msg = ""
-            return
-        name, base_url, key_env = parts
-        if not base_url.startswith("http"):
-            self.mode = "result"
-            self.probe_results = ["base_url must start with http(s)://"]
-            self.msg = ""
-            return
-        cfg = self.ed.load()
-        names = {p["name"] for p in self._cfg_provs(cfg)}
-        if name in names:
-            self.mode = "result"
-            self.probe_results = [f"provider '{name}' already exists"]
-            self.msg = ""
-            return
-        # R5: verify the key_env var actually exists in ~/.hermes/.env
-        # before we stage a provider that would never authenticate.
-        env_path = Path.home() / ".hermes" / ".env"
-        if not env_path.exists() or key_env not in env_path.read_text(errors="replace"):
-            self.mode = "result"
-            self.probe_results = [f"key_env '{key_env}' not found in ~/.hermes/.env"]
-            self.msg = ""
-            return
-        # live-probe before staging
-        probe = self.ed.probe_catalog(base_url, key_env, timeout=15)
-        note = (f"probe: {len(probe['models'])} models" if probe["ok"]
-                else f"probe FAILED ({probe['error'][:60]}) — added anyway")
-        cfg["providers"].append({"name": name, "base_url": base_url,
-                                 "key_env": key_env, "key_envs": [key_env]})
-        self.probe_results = [note]
-        self._stage(cfg, f"add provider '{name}'")
+    # provider CRUD (toggle/remove/add) moved to the Providers screen —
+    # this editor only keeps the model browser + test bench.
 
     def move_pick(self, delta: int):
         if self.chosen_provs:

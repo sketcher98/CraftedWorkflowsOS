@@ -266,18 +266,6 @@ class RoutesScreen:
             if key in (curses.KEY_DOWN, ord('j')):
                 ed.pick_idx = min(len(ed._cfg_provs()) - 1, ed.pick_idx + 1)
                 return True
-            if key == ord(' '):
-                ed.toggle_provider_disable()
-                return True
-            if key == ord('r'):
-                ed.remove_provider()
-                return True
-            if key == ord('k'):  # key manager for selected provider
-                cfg = ed.ed.load()
-                provs = ed._cfg_provs(cfg)
-                if 0 <= ed.pick_idx < len(provs):
-                    ed.open_key_mgmt(provs[ed.pick_idx]["name"])
-                return True
             if key == ord('m'):  # model browser for selected provider
                 cfg = ed.ed.load()
                 provs = ed._cfg_provs(cfg)
@@ -287,26 +275,8 @@ class RoutesScreen:
             if key == ord('c'):  # test bench
                 ed.open_bench()
                 return True
-            if key == ord('a'):
-                ed.open_prov_add()
-                return True
             if key == 27:
                 ed.cancel()
-                return True
-            return True
-        if ed.mode == "prov_add":
-            if key in (10, 13, curses.KEY_ENTER):
-                if ed.input_buf.strip():
-                    ed.add_provider(ed.input_buf.strip())
-                return True
-            if key in (8, 127, curses.KEY_BACKSPACE):
-                ed.input_buf = ed.input_buf[:-1]
-                return True
-            if 32 <= key <= 126:
-                ed.input_buf += chr(key)
-                return True
-            if key == 27:
-                ed.open_prov_mgmt()
                 return True
             return True
         if ed.mode in ("confirm_delete", "diff"):
@@ -445,7 +415,7 @@ class RoutesScreen:
         elif ed.mode == "prov_mgmt":
             cfg = ed.ed.load()
             provs = ed._cfg_provs(cfg)
-            dis = ed._disabled_set(cfg)
+            dis = {p["name"] for p in cfg.get("disabled_providers", [])}
             lines.append(f"PROVIDERS — {len(provs)} configured "
                          f"({len(dis)} disabled)")
             lines.append("")
@@ -456,13 +426,6 @@ class RoutesScreen:
             lines.append("")
             if ed.msg:
                 lines.append(ed.msg[:cols - 6])
-        elif ed.mode == "prov_add":
-            lines.append("ADD PROVIDER — format: name base_url key_env")
-            lines.append("example: myprov https://api.example.com/v1 MY_KEY_ENV_NAME")
-            lines.append(f"> {ed.input_buf}_")
-            lines.append("")
-            if ed.probe_results:
-                lines.extend(ed.probe_results[:2])
         elif ed.mode == "confirm_delete":
             lines.append(f"DELETE preference '{ed.pending_reason}' ?")
             lines.append("This removes all its routes from config.json (backup kept).")
@@ -489,8 +452,7 @@ class RoutesScreen:
             "add":          "[type]=query   [Enter]=search all catalogs   [Esc]=cancel",
             "results":      "[j/k]=select model   [Enter]=pick   [Esc]=cancel",
             "pick_prov":    "[space]=toggle provider   [Enter]=stage   [Esc]=back to results",
-            "prov_mgmt":    "[j/k]=select   [space]=disable/enable   [r]=remove   [a]=add provider   [k]=keys   [m]=models   [c]=bench   [Esc]=close",
-            "prov_add":     "[type]=name url key_env   [Enter]=probe+stage   [Esc]=back",
+            "prov_mgmt":    "[j/k]=select   [m]=models   [c]=bench   [Esc]=close",
             "key_mgmt":     "[t]=test key   [T]=test ALL   [a]=add key   [d]=delete   [Esc]=browse models",
             "km_add":       "[type]=env var name   [Enter]=stage   [Esc]=back",
             "model_browser": "[j/k]=select model   [t]=test   [a]=route it   [c]=add to bench   [Esc]=close",
