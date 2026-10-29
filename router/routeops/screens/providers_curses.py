@@ -535,9 +535,16 @@ class ProvidersScreen:
             provider_name = self._selected_provider_row()["name"]
             title = f"PROVIDERS — DETAIL: {provider_name}"
             hint = "[t]=probe keys  [m]=key management  [Esc]=back"
+            short_hint = "[t]=probe  [m]=keys  [Esc]=back"
         else:
             title = f"PROVIDERS  [{len(self.app_state.providers)} providers]"
             hint = "[Enter]=detail  [t]=probe  [a]=add  [x]=disable/enable  [d]=del  [Esc]=back"
+            short_hint = "[Enter]=detail  [t]=probe  [a]=add  [Esc]=back"
+        # Guard against hint/title collision on narrow terminals: use a
+        # compact hint when the full one would overlap the title.
+        room = cols - (3 + len(title)) - 6
+        if len(hint) > room:
+            hint = short_hint if len(short_hint) <= room else "[Esc]=back"
         term.write(y, 3, title, curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)
