@@ -99,6 +99,20 @@ class HistoryScreen:
             self.scroll_offset = 0
             return True
 
+        if key in (curses.KEY_LEFT,):  # previous filter (same as Diagnostics tabs)
+            current_idx = self.filter_names.index(self.filter_mode)
+            self.filter_mode = self.filter_names[(current_idx - 1) % len(self.filter_names)]
+            self.selected_index = 0
+            self.scroll_offset = 0
+            return True
+
+        if key in (curses.KEY_RIGHT,):  # next filter (same as Diagnostics tabs)
+            current_idx = self.filter_names.index(self.filter_mode)
+            self.filter_mode = self.filter_names[(current_idx + 1) % len(self.filter_names)]
+            self.selected_index = 0
+            self.scroll_offset = 0
+            return True
+
         if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             idx = int(chr(key)) - 1
             if idx < len(self.filter_names):
@@ -149,7 +163,7 @@ class HistoryScreen:
         y = render_header(term.write, self.app_state, y, cols, rows)
 
         # Title line: HISTORY @3, hint right-aligned, ruled below
-        hint = "[1-7]=filter  [Enter]=detail  [Esc]=back"
+        hint = "[←/→]=filter  [1-7]=filter  [Enter]=detail  [Esc]=back"
         term.write(y, 3, "HISTORY", curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)
