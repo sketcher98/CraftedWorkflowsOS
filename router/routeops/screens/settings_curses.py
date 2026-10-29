@@ -347,8 +347,14 @@ class SettingsScreen:
         from routeops.tui.render_std import render_header, render_box
         y = render_header(term.write, self.app_state, y, cols, rows)
 
-        # Tab bar — S6: same adaptive fix as Diagnostics; never clip tabs.
-        term.write(y, 0, "SETTINGS  ", curses.A_BOLD | curses.color_pair(1))
+        # Title line: "SETTINGS" left, action hint right-aligned
+        hint = "[+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
+        term.write(y, 0, "SETTINGS", curses.A_BOLD | curses.color_pair(1))
+        term.write(y, cols - len(hint) - 1, hint[:cols - 2],
+                   curses.color_pair(5) | curses.A_DIM)
+        y += 1
+
+        # Tab line: names only, same starting column as before
         tx = 10
         full_names = self.tab_names
         compact_names = ["Mon", "Rtr", "Pth"]
@@ -361,9 +367,6 @@ class SettingsScreen:
                 break
             term.write(y, tx, marker, attr)
             tx += len(marker) + 1
-        hint = "[+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
-        term.write(y, max(tx + 2, cols - len(hint) - 1), hint[:cols - tx - 3],
-                   curses.color_pair(5) | curses.A_DIM)
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
