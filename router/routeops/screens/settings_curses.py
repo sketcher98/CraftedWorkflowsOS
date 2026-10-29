@@ -347,18 +347,23 @@ class SettingsScreen:
         from routeops.tui.render_std import render_header, render_box
         y = render_header(term.write, self.app_state, y, cols, rows)
 
-        # Title line: "SETTINGS" left, action hint right-aligned
+        # Title line: "SETTINGS" left, action hint right-aligned, ruled
+        # above and below; tab names directly under, also ruled.
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
         hint = "[+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
         term.write(y, 0, "SETTINGS", curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)
         y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
 
-        # Tab line: names only, same starting column as before
-        tx = 10
+        # Tab line: names only, directly under SETTINGS
+        tx = 3
         full_names = self.tab_names
         compact_names = ["Mon", "Rtr", "Pth"]
-        names = full_names if sum(len(n) + 2 for n in full_names) + 10 + 4 <= cols else compact_names
+        names = full_names if sum(len(n) + 2 for n in full_names) + 3 + 4 <= cols else compact_names
         for i, name in enumerate(names):
             marker = f"[{name}]" if i == self.current_tab else f" {name} "
             attr = (curses.color_pair(2) | curses.A_BOLD if i == self.current_tab
