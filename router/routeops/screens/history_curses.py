@@ -50,6 +50,7 @@ class HistoryScreen:
                 self._indexing = True
                 self._index = HistoryIndex(path)  # empty until scanned
                 self._index_path = path
+                self._last_index = now  # suppress UI-thread refresh while scanning
                 import threading
 
                 def build():
@@ -65,7 +66,7 @@ class HistoryScreen:
                 self._index.refresh()
                 self._last_index = now
             return self._index
-        elif now - getattr(self, "_last_index", 0) > 3.0:
+        elif not self._indexing and now - getattr(self, "_last_index", 0) > 3.0:
             self._index.refresh()
             self._last_index = now
         return self._index
