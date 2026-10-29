@@ -662,60 +662,83 @@ class RouteEditor:
     # ------------------------------------------------------------ tests
 
     def test_current_route(self, pref_idx: int, route_idx: int):
+        """Live-test the WHOLE preference: every route (provider/model) in it,
+        EVERY key pool of each provider. Runs parallel on a daemon thread —
+        the TUI never freezes; wall time ≈ the slowest single key test."""
         cfg = self.ed.load()
         prefs = self._prefs(cfg)
         if not (0 <= pref_idx < len(prefs)):
             return
         pref = prefs[pref_idx]
-        if not (0 <= route_idx < len(pref["routes"])):
-            return
-        route = pref["routes"][route_idx]
-        prov = next((p for p in cfg["providers"]
-                     if p["name"] == route["provider"]), None)
-        if not prov:
-            return
-        # Detailed test: EVERY key pool of this provider, live.
-        key_envs = list(prov.get("key_envs") or []) or \
-            ([prov["key_env"]] if prov.get("key_env") else [])
-        base_url = prov.get("base_url", "")
-        model = route["model"]
+        pref_name = pref.get("name", "?")
+
+        # Collect tasks: (provider name, base_url, key_env, model)
+        tasks = []
+        prov_by_name = {p["name"]: p for p in cfg.get("providers", [])}
+        for route in pref.get("routes", []):
+            prov = prov_by_name.get(route.get("provider"))
+            if not prov:
+                continue
+            keys = list(prov.get("key_envs") or []) or \
+                ([prov["key_env"]] if prov.get("key_env") else [])
+            base = prov.get("base_url", "")
+            model = route.get("model", "")
+            for k in keys:
+                tasks.append((route["provider"], base, k, model))
+
         self.mode = "result"
-        if not key_envs:
-            self.route_test_result = [f"{route['provider']}/{model}: no keys configured"]
+        if not tasks:
+            self.route_test_result = [f"ROUTE TEST — {pref_name}: no routes/keys to test"]
             self.msg = "test complete"
             return
-        # Run on a daemon thread — tests can take 20-45s each and must
-        # never freeze the TUI. Pending state paints immediately.
-        import threading
-        self.route_test_result = [f"ROUTE TEST — {route['provider']} / {model}",
-                                  f"    {base_url}", "",
-                                  f"testing {len(key_envs)} key pool(s) …"]
+
+        n_prov = len({t[0] for t in tasks})
+        self.route_test_result = [
+            f"ROUTE TEST — {pref_name}",
+            f"    {n_prov} provider(s), {len(tasks)} key pool(s) — running parallel …"]
         self.msg = "testing…"
+
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
 
         def run():
             try:
-                lines = []
-                lines.append(f"ROUTE TEST — {route['provider']} / {model}")
-                lines.append(f"    {base_url}")
-                lines.append("")
+                results = {}
+                with ThreadPoolExecutor(max_workers=min(6, len(tasks))) as ex:
+                    futs = {ex.submit(self.ed.test_key, base, kenv, model,
+                                      timeout=45): (pn, kenv)
+                            for pn, base, kenv, model in tasks}
+                    for fut in futs:
+                        pn, kenv = futs[fut]
+                        try:
+                            results[(pn, kenv)] = fut.result()
+                        except Exception as e:
+                            results[(pn, kenv)] = {"ok": False,
+                                                   "detail": str(e)[:90],
+                                                   "ms": 0, "code": "ERR"}
+
+                lines = [f"ROUTE TEST — {pref_name}", ""]
                 ok_n = 0
-                for i, kenv in enumerate(key_envs):
-                    r = self.ed.test_key(base_url, kenv, model)
-                    ok = r.get("ok")
-                    if ok:
-                        ok_n += 1
-                    mark = "●" if ok else "✗"
-                    lines.append(f"  [{i}] {kenv:<40} {mark} "
-                                 f"{'OK' if ok else 'FAIL'} "
-                                 f"{r.get('code','')} · {r.get('ms',0)}ms")
-                    if not ok:
-                        lines.append(f"        {r.get('detail','')[:90]}")
-                lines.append("")
-                lines.append(f"{ok_n}/{len(key_envs)} key pools OK")
+                # group by provider, in route order
+                for pn in dict.fromkeys(t[0] for t in tasks):
+                    sub = [(k, results[(pn, k)]) for pn2, k in results if pn2 == pn]
+                    lines.append(f"  {pn}:")
+                    for i, (kenv, r) in enumerate(sub):
+                        ok = r.get("ok")
+                        if ok:
+                            ok_n += 1
+                        mark = "●" if ok else "✗"
+                        lines.append(f"    [{i}] {kenv:<40} {mark} "
+                                     f"{'OK' if ok else 'FAIL'} "
+                                     f"{r.get('code','')} · {r.get('ms',0)}ms")
+                        if not ok:
+                            lines.append(f"          {r.get('detail','')[:90]}")
+                    lines.append("")
+                lines.append(f"{ok_n}/{len(tasks)} key pools OK")
                 self.route_test_result = lines
                 self.msg = "test complete"
             except Exception as e:
-                self.route_test_result = [f"ROUTE TEST — {route['provider']} / {model}",
+                self.route_test_result = [f"ROUTE TEST — {pref_name}",
                                           f"test error: {str(e)[:80]}"]
                 self.msg = "test failed"
 
