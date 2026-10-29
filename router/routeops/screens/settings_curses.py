@@ -347,12 +347,11 @@ class SettingsScreen:
         from routeops.tui.render_std import render_header, render_box
         y = render_header(term.write, self.app_state, y, cols, rows)
 
-        # Title line: "SETTINGS" left, action hint right-aligned, ruled
-        # above and below; tab names directly under, also ruled.
-        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
-        y += 1
+        # Title line: "SETTINGS" aligned with the tabs below (col 3),
+        # hint right-aligned; ruled below. The header rule above serves
+        # as the top border.
         hint = "[+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
-        term.write(y, 0, "SETTINGS", curses.A_BOLD | curses.color_pair(1))
+        term.write(y, 3, "SETTINGS", curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)
         y += 1
