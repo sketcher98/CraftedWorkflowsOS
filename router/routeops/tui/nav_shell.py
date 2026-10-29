@@ -36,6 +36,10 @@ class NavigationShell:
         self.term: Optional[CursesTerminal] = None
         self.current_screen = ScreenType.OVERVIEW
         self.running = False
+        # Navigation back-stack: Esc pops to the previous screen instead of
+        # always dumping to Overview. Max depth 20 to bound memory.
+        self._nav_stack: list = []
+        self._NAV_STACK_MAX = 20
         
         # Screen instances
         self.screens: Dict[str, object] = {}
@@ -127,7 +131,12 @@ class NavigationShell:
         if key == ord('q') and self.current_screen == ScreenType.OVERVIEW:
             return False  # Quit on 'q' from overview
 
-        if key == 27:  # Esc
+        if key == 27:  # Esc = BACK one screen (never more than that)
+            # Note: if the active screen consumed Esc (closed its own detail/
+            # overlay), we never reach here. Unhandled Esc = pop the stack.
+            if self._nav_stack:
+                self.current_screen = self._nav_stack.pop()
+                return True
             if self.current_screen != ScreenType.OVERVIEW:
                 self.current_screen = ScreenType.OVERVIEW
                 return True
@@ -148,10 +157,21 @@ class NavigationShell:
         if key in self.screen_keys:
             target = self.screen_keys[key]
             if target != self.current_screen:
+                self._push_nav(self.current_screen)
                 self.current_screen = target
                 return True
         
         return True
+
+    def _push_nav(self, screen) -> None:
+        """Record the screen we are leaving so Esc can return to it."""
+        # We are called BEFORE current_screen changes, so don't compare
+        # against it — only dedupe against the current stack top.
+        if self._nav_stack and self._nav_stack[-1] == screen:
+            return
+        self._nav_stack.append(screen)
+        if len(self._nav_stack) > self._NAV_STACK_MAX:
+            self._nav_stack.pop(0)
 
     def _cycle_screen(self, delta: int) -> None:
         """Move to the next/previous screen in cycle order."""
@@ -160,7 +180,9 @@ class NavigationShell:
         except ValueError:
             idx = 0
         nxt = (idx + delta) % len(self.SCREEN_CYCLE)
-        self.current_screen = self.SCREEN_CYCLE[nxt]
+        if self.SCREEN_CYCLE[nxt] != self.current_screen:
+            self._push_nav(self.current_screen)
+            self.current_screen = self.SCREEN_CYCLE[nxt]
 
     def _enter_provider_screen(self, screen_id) -> None:
         """Enter keymgmt/perkey with selection synced to the provider the
@@ -175,4 +197,8 @@ class NavigationShell:
                     screen.selected_provider = provs.index(target)
             except Exception:
                 pass
+        from_screen = self.current_screen
         self.current_screen = screen_id
+        # Back-stack: entering keymgmt/perkey records the screen we came
+        # from so Esc returns there, not to Overview.
+        self._push_nav(from_screen)
