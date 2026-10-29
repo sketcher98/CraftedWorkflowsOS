@@ -175,10 +175,15 @@ class ProvidersScreen:
             detail_lines, seg_lines = self._build_detail_lines(pm, cols - 4)
             # Probe results (from [t]) render INSIDE the detail view — a
             # banner only drawn on home was invisible while in detail.
+            # OK rows green, FAIL rows red.
             if self.test_result and self.test_lines:
+                title_c = curses.color_pair(2) if "OK" in self.test_result else curses.color_pair(4)
+                seg_lines[len(detail_lines)] = [(self.test_result, title_c | curses.A_BOLD)]
                 detail_lines.append("")
-                detail_lines.append(self.test_result)
-                detail_lines.extend(self.test_lines)
+                for tl in self.test_lines:
+                    row_c = curses.color_pair(2) if "● live" in tl else curses.color_pair(4)
+                    seg_lines[len(detail_lines)] = [(tl, row_c)]
+                    detail_lines.append("")
             # Actions live INSIDE the provider screen: t/m/i.
             detail_lines.append("")
             detail_lines.append("[t]=probe keys  [m]=keys  [i]=per-key  [Esc]=back to provider list")

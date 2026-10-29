@@ -208,6 +208,8 @@ class NavigationShell:
             if screen is not None:
                 if screen_id == "keymgmt" and hasattr(screen, "show_detail"):
                     screen.show_detail = True
+                    screen._entered_from_detail = True
                 elif screen_id == "perkey" and hasattr(screen, "show_key_detail"):
                     screen.show_key_detail = True
+                    screen._entered_from_detail = True
             self.app_state._from_provider_detail = False

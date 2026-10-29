@@ -35,6 +35,11 @@ class PerKeyHealthScreen:
         providers = self._get_sorted_providers()
 
         if self.show_key_detail:
+            # First Esc when scoped from a provider's detail returns False so
+            # nav pops back to that provider — not to the all-providers list.
+            if key == 27 and getattr(self, "_entered_from_detail", False):
+                self._entered_from_detail = False
+                return False
             if key in (curses.KEY_UP, ord('k')):
                 self.selected_key = max(0, self.selected_key - 1)
                 return True
