@@ -260,10 +260,12 @@ class RouteEditor:
             return
         if getattr(self, "bench", None) is None:
             self.bench = []
+            self.bench_sel = []
         if len(self.bench) >= 10:
             self.mb_result = "bench full (10 slots) — run it (c from providers)"
             return
         self.bench.append((self.mb_prov, self.mb_models[self.mb_idx]))
+        self.bench_sel.append(True)
         self.mb_result = (f"bench slot {len(self.bench)}/10: "
                            f"{self.mb_prov}/{self.mb_models[self.mb_idx]}")
 
@@ -272,23 +274,59 @@ class RouteEditor:
     def open_bench(self):
         if getattr(self, "bench", None) is None:
             self.bench = []
+            self.bench_sel = []
+        # keep every existing slot selected by default
+        if getattr(self, "bench_sel", None) is None or \
+           len(self.bench_sel) != len(self.bench):
+            self.bench_sel = [True] * len(self.bench)
+        self.bench_idx = 0
         self.bench_results = None
         self.mode = "test_bench"
-        self.msg = ("r=run all  x=clear slots  Esc=close  "
-                    "(add slots: model_browser c)")
+        self.msg = ("↑/↓=slot  space=select/unselect  r=run selected  "
+                    "x=clear  Esc=close  (add slots: model_browser c)")
+
+    def bench_toggle_selected(self):
+        if not self.bench:
+            return
+        if not (0 <= self.bench_idx < len(self.bench)):
+            return
+        self.bench_sel[self.bench_idx] = not self.bench_sel[self.bench_idx]
 
     def bench_run(self):
         cfg = self.ed.load()
-        results = []
-        for prov_name, model in getattr(self, "bench", []):
-            keys, base_url = self._keys_of(cfg, prov_name)
-            r = self.ed.test_key(base_url, keys[0] if keys else "", model,
-                                 timeout=45)
-            results.append((prov_name, model, r))
-        self.bench_results = results
+        todo = [(i, pn, mdl) for i, (pn, mdl) in enumerate(getattr(self, "bench", []))
+                if getattr(self, "bench_sel", [True]*len(self.bench))[i]]
+        self.bench_results = [("…", "…", {"ok": None, "detail": "running …"})] if todo else []
+        if not todo:
+            return
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        def run():
+            try:
+                results = []
+                with ThreadPoolExecutor(max_workers=min(4, len(todo))) as ex:
+                    futs = [ex.submit(self._bench_one, cfg, pn, mdl)
+                            for _, pn, mdl in todo]
+                    for fut in futs:
+                        results.append(fut.result())
+                self.bench_results = results
+            except Exception as e:
+                self.bench_results = [("bench", "error", {"ok": False,
+                                                          "detail": str(e)[:80]})]
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _bench_one(self, cfg, prov_name, model):
+        keys, base_url = self._keys_of(cfg, prov_name)
+        r = self.ed.test_key(base_url, keys[0] if keys else "", model,
+                             timeout=45)
+        return (prov_name, model, r)
 
     def bench_clear(self):
         self.bench = []
+        self.bench_sel = []
+        self.bench_idx = 0
         self.bench_results = None
 
     # ---------------------------------------------------- search

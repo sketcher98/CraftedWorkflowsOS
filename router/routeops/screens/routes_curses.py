@@ -180,6 +180,15 @@ class RoutesScreen:
                 return True
             return True
         if ed.mode == "test_bench":
+            if key in (curses.KEY_UP, ord('k')):
+                ed.bench_idx = max(0, ed.bench_idx - 1)
+                return True
+            if key in (curses.KEY_DOWN, ord('j')):
+                ed.bench_idx = min(len(getattr(ed, 'bench', []) or []) - 1, ed.bench_idx + 1)
+                return True
+            if key == ord(' '):  # toggle select slot
+                ed.bench_toggle_selected()
+                return True
             if key == ord('r'):
                 ed.bench_run()
                 return True
@@ -391,13 +400,19 @@ class RoutesScreen:
                 lines.append("  BENCH (0/10) — empty: [c] adds this model")
             lines.append(f"  [c] adds '{ed.mb_models[ed.mb_idx] if ed.mb_models else '—'}' to bench")
         elif ed.mode == "test_bench":
-            lines.append("TEST BENCH — up to 10 provider/model pairs")
+            lines.append("TEST BENCH — up to 10 provider/model pairs (space=toggle, r=run selected)")
             lines.append("")
             slots = getattr(ed, "bench", []) or []
             if not slots:
                 lines.append("  (empty — add slots from model browser: c)")
             for i, (pn, mdl) in enumerate(slots):
-                lines.append(f"  [{i+1}] {pn} / {mdl}")
+                sel = ed.bench_sel[i] if getattr(ed, "bench_sel", None) else True
+                mark = "[x]" if sel else "[ ]"
+                cur = "▶" if i == getattr(ed, "bench_idx", 0) else " "
+                lines.append(f" {cur} {mark} [{i+1}] {pn} / {mdl}")
+            n_sel = sum(1 for s in (getattr(ed, "bench_sel", None) or [True]*len(slots)) if s)
+            lines.append("")
+            lines.append(f"  {n_sel}/{len(slots)} selected — r runs only those")
             lines.append("")
             if ed.bench_results:
                 lines.append("RESULTS:")
@@ -490,7 +505,7 @@ class RoutesScreen:
             "key_mgmt":     "[t]=test key   [T]=test ALL   [a]=add key   [d]=delete   [Esc]=browse models",
             "km_add":       "[type]=env var name   [Enter]=stage   [Esc]=back",
             "model_browser": "[j/k]=select model   [t]=test   [a]=route it   [c]=add to bench   [Esc]=close",
-            "test_bench":   "[r]=run all slots   [x]=clear   [Esc]=close",
+            "test_bench":   "[↑/↓]=slot  [space]=select/unselect  [r]=run selected  [x]=clear  [Esc]=close",
             "confirm_delete": "[Enter/y]=DELETE   [n/Esc]=cancel",
             "diff":         "[Enter/y]=write to config.json (backup auto-made)   [n/Esc]=discard",
             "result":       "[any key]=close",
