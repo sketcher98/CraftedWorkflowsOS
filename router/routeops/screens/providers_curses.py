@@ -75,8 +75,8 @@ class ProvidersScreen:
                 self.detail_scroll = 0
             return True
 
-        if key == ord('t'):  # live-test selected provider
-            if providers and not self.show_detail:
+        if key == ord('t'):  # probe keys — only inside provider detail
+            if self.show_detail and providers:
                 self._test_selected(providers)
             return True
 
@@ -88,15 +88,14 @@ class ProvidersScreen:
                 return False  # Let parent handle
             return True
         
-        if key == ord('m'):  # Key Management (Termux-safe; was Shift+K, unreachable on phone)
-            if providers:
+        if key == ord('m'):  # Key Management — inside provider detail only
+            if self.show_detail and providers:
                 self.app_state.detail_target = providers[self.selected_index]
-                # Signal to parent to switch to keymgmt screen
                 return "keymgmt"
             return True
 
-        if key == ord('i'):  # Per-Key Health (inspect keys of selected provider)
-            if providers:
+        if key == ord('i'):  # Per-Key Health — inside provider detail only
+            if self.show_detail and providers:
                 self.app_state.detail_target = providers[self.selected_index]
                 return "perkey"
             return True
@@ -146,8 +145,9 @@ class ProvidersScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
-        # Title bar — P8: h is now the global History key, not 'back'
-        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe keys  [m]=keys  [i]=per-key  [Esc] Back"
+        # Title bar — home is a pure list; ALL actions live inside each
+        # provider's detail view (t/m/i).
+        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [Esc] Back"
         term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
@@ -170,6 +170,9 @@ class ProvidersScreen:
             provider_name = self._sorted_providers()[self.selected_index]
             pm = self.app_state.providers[provider_name]
             detail_lines, seg_lines = self._build_detail_lines(pm, cols - 4)
+            # Actions live INSIDE the provider screen: t/m/i.
+            detail_lines.append("")
+            detail_lines.append("[t]=probe keys  [m]=keys  [i]=per-key  [Esc]=back to provider list")
             self._render_detail_box(term, y, cols, f"DETAIL: {provider_name}",
                                     detail_lines, seg_lines)
         else:
