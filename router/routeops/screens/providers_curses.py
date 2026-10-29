@@ -367,9 +367,14 @@ class ProvidersScreen:
             term.write(y, 2, f"Remove provider '{self.overlay_msg}'?  [y]=yes  [n/Esc]=no", curses.color_pair(4) | curses.A_BOLD)
             return
 
-        # Title bar — home is a pure list; ALL actions live inside each
-        # provider's detail view (t/m/i).
-        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [d]=delete  [Esc] Back"
+        # Title bar — context-dependent: home shows list actions; detail
+        # shows the provider name (the detail body already carries its own
+        # action hint line).
+        if self.show_detail and self.app_state.providers:
+            provider_name = self._sorted_providers()[self.selected_index]
+            title = f"● PROVIDERS — DETAIL: {provider_name}"
+        else:
+            title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [d]=delete  [Esc] Back"
         term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
