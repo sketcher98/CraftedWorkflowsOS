@@ -518,8 +518,8 @@ class RoutesScreen:
             shown += 1
         term.write(y + 1 + shown, 0, f"└{'─' * w}┘", curses.color_pair(1))
 
-        # Action bar: key help position like Overview, disclaimer below
-        self._render_key_help(term, rows - 2, cols)
+        # Action bar: the mode's keys only — home key-help is a routes-home
+        # element and must NOT appear inside editor overlays.
         term.write(rows - 1, 0, actions[:cols - 1], curses.A_BOLD | curses.color_pair(4))
 
     def render(self, term) -> None:
