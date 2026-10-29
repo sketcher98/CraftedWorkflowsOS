@@ -54,6 +54,18 @@ class RoutesScreen:
                 self.horizontal_scroll = 0
             return True
 
+        # --- Pending preference moves: Enter=save (diff gate), Esc=cancel ---
+        # Must run BEFORE the generic Esc return so Esc cancels a staged
+        # change instead of popping nav.
+        if self.editor.pending is not None and self.editor.mode == "closed":
+            if key in (10, 13, curses.KEY_ENTER):
+                self.editor.stage_save_edit()
+                return True
+            if key == 27:
+                self.editor.pending = None
+                self.editor.msg = ""
+                return True
+
         if key in (27, ord('h'), ord('q')):  # Esc, h, q
             return False  # Let parent handle
 
@@ -74,22 +86,16 @@ class RoutesScreen:
             self.editor.test_current_route(
                 self.current_pref_index, self.editor.route_idx)
             return True
+        if key == ord('n'):
+            # R10: rename current preference (staged through diff gate)
+            self.editor.open_rename(self.current_pref_index)
+            return True
         if key == ord('g'):
             # B-6: toggle routing strategy (configured order <-> LKGP) via
             # the same staged-diff gate as every other config edit.
             # ('s' is reserved globally for Settings — do not shadow it.)
             self.editor.stage_strategy_toggle()
             return True
-
-        # --- Pending preference moves: Enter=save (diff gate), Esc=cancel ---
-        if self.editor.pending is not None and self.editor.mode == "closed":
-            if key in (10, 13, curses.KEY_ENTER):
-                self.editor.stage_save_edit()
-                return True
-            if key == 27:
-                self.editor.pending = None
-                self.editor.msg = ""
-                return True
 
         # --- Preference reorder: j/k move pref in fallback order ---
         if key in (ord('j'), ord('J')):
@@ -279,6 +285,20 @@ class RoutesScreen:
                 ed.cancel()
                 return True
             return True
+        if ed.mode == "rename_pref":
+            if key in (10, 13, curses.KEY_ENTER):
+                ed.stage_rename()
+                return True
+            if key in (8, 127, curses.KEY_BACKSPACE):
+                ed.input_buf = ed.input_buf[:-1]
+                return True
+            if 32 <= key <= 126:
+                ed.input_buf += chr(key)
+                return True
+            if key == 27:
+                ed.cancel()
+                return True
+            return True
         if ed.mode in ("confirm_delete", "diff"):
             # R2: Enter and y both confirm (Settings uses Enter; keep y as
             # the legacy alias), Esc/n cancel.
@@ -423,6 +443,9 @@ class RoutesScreen:
                 sel = ">" if i == ed.pick_idx else " "
                 state = "[DISABLED]" if p["name"] in dis else "[active]"
                 lines.append(f" {sel} {p['name']:<12} {state:<12} {p['base_url'][:44]}")
+        elif ed.mode == "rename_pref":
+            lines.append("RENAME PREFERENCE — type new name, Enter=stage, Esc=cancel")
+            lines.append(f"> {ed.input_buf}_")
             lines.append("")
             if ed.msg:
                 lines.append(ed.msg[:cols - 6])
@@ -453,6 +476,7 @@ class RoutesScreen:
             "results":      "[j/k]=select model   [Enter]=pick   [Esc]=cancel",
             "pick_prov":    "[space]=toggle provider   [Enter]=stage   [Esc]=back to results",
             "prov_mgmt":    "[j/k]=select   [m]=models   [c]=bench   [Esc]=close",
+            "rename_pref":  "[type]=new name   [Enter]=stage   [Esc]=cancel",
             "key_mgmt":     "[t]=test key   [T]=test ALL   [a]=add key   [d]=delete   [Esc]=browse models",
             "km_add":       "[type]=env var name   [Enter]=stage   [Esc]=back",
             "model_browser": "[j/k]=select model   [t]=test   [a]=route it   [c]=add to bench   [Esc]=close",
@@ -626,7 +650,7 @@ class RoutesScreen:
 
     def _render_key_help(self, term, y: int, cols: int) -> None:
         help_text = ("[Tab]=next pref  [e]=edit  [a]=add model  [d]=delete  "
-                     "[x]=test route  [o]=providers  [j/k]=move pref order  "
+                     "[n]=rename  [x]=test route  [o]=providers  [j/k]=move pref order  "
                      "[←/→]=scroll  [q]=quit")
         term.write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
 

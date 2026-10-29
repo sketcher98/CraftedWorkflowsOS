@@ -383,6 +383,38 @@ class RouteEditor:
         cfg["strategy"] = "" if cur == "lkgp" else "lkgp"
         self._stage(cfg, f"strategy: {cur or 'configured order'} -> {cfg['strategy'] or 'configured order'}")
 
+    # ------------------------------------------------------- rename
+
+    def open_rename(self, pref_idx: int):
+        """Rename preference — staged through the diff gate like everything
+        else. Typing happens in routes_curses (rename_pref mode)."""
+        self.pref_idx = pref_idx
+        self.mode = "rename_pref"
+        self.input_buf = ""
+        self.msg = "type new preference name, Enter=stage, Esc=cancel"
+
+    def stage_rename(self):
+        if not self.input_buf.strip():
+            self.msg = "name cannot be empty"
+            return
+        cfg = self.ed.load()
+        prefs = cfg.get("preferences", [])
+        if not (0 <= self.pref_idx < len(prefs)):
+            self.msg = "preference index out of range"
+            return
+        old = prefs[self.pref_idx].get("name", "?")
+        new = self.input_buf.strip()
+        if new == old:
+            self.msg = "same name — nothing to rename"
+            return
+        if any(p.get("name") == new for p in prefs if p is not prefs[self.pref_idx]):
+            self.msg = f"another preference already named '{new}'"
+            return
+        prefs[self.pref_idx]["name"] = new
+        self._stage(cfg, f"rename preference '{old}' -> '{new}'")
+        self.mode = "closed"
+        self.input_buf = ""
+
     # ------------------------------------------------------- edit/delete
 
     def open_edit(self, pref_idx: int):
