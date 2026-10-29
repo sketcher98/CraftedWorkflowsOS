@@ -26,25 +26,45 @@ class HistoryScreen:
         self.show_detail = False
         self.detail_scroll = 0
         self.filter_names = ["all", "attempts", "results", "fallbacks", "cooldowns", "health", "errors"]
-        # Full-file index — built lazily on first render
+        # Full-file index — built lazily on first render, ASYNC so the
+        # first open never freezes the TUI on the full-file scan.
         self._index: Optional[HistoryIndex] = None
         self._index_path: str = ""
+        self._indexing = False
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(60, width)
         self.height = max(15, height)
 
     def _ensure_index(self) -> HistoryIndex:
-        """Build/refresh the full-file index (throttled to every 3s)."""
+        """Build/refresh the full-file index (throttled to every 3s).
+        The FIRST build runs on a daemon thread; until it finishes, an empty
+        index is returned and render() shows an 'indexing' state."""
         import time
         from routeops.config import ROUTER_EVENTS_JSONL
         path = str(ROUTER_EVENTS_JSONL)
         now = time.time()
         if self._index is None or path != self._index_path:
-            self._index = HistoryIndex(path)
-            self._index_path = path
-            self._index.refresh()
-            self._last_index = now
+            if self._index is None and not self._indexing:
+                # kick off async full scan
+                self._indexing = True
+                self._index = HistoryIndex(path)  # empty until scanned
+                self._index_path = path
+                import threading
+
+                def build():
+                    try:
+                        self._index.refresh()
+                    finally:
+                        self._indexing = False
+
+                threading.Thread(target=build, daemon=True).start()
+                return self._index
+            if self._index is not None:
+                self._index_path = path
+                self._index.refresh()
+                self._last_index = now
+            return self._index
         elif now - getattr(self, "_last_index", 0) > 3.0:
             self._index.refresh()
             self._last_index = now
@@ -124,6 +144,12 @@ class HistoryScreen:
         y += 1
 
         events = self._get_filtered_events()
+
+        # First-open full-file scan is async — show progress until ready
+        if self._indexing:
+            term.write(y, 2, "Indexing full event log (first open) …", curses.color_pair(3) | curses.A_BOLD)
+            term.write(y + 1, 2, "This happens once per routerops start — the screen stays live.", curses.A_DIM)
+            return
 
         if self.show_detail and events and self.selected_index < len(events):
             event = events[self.selected_index]
