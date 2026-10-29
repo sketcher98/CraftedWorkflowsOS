@@ -151,7 +151,7 @@ class KeyManagementScreen:
         return providers
 
     def _get_provider_keys(self, provider_name: str) -> List[Dict]:
-        """Get key info for a provider from config."""
+        """Get key info for a provider from config + JSONL health."""
         pm = self.app_state.providers.get(provider_name)
         if not pm or not pm.config:
             return []
@@ -163,6 +163,17 @@ class KeyManagementScreen:
         elif pm.config.key_env:
             key_envs = [pm.config.key_env]
         
+        # Per-key health from recent events — same data & semantics as the
+        # old per-key screen, now consolidated here (success/abort/fail).
+        from routeops.tui.bars import classify_outcome, health_display
+        stats = {}
+        for event in self.app_state.recent_events[-500:]:
+            if event.provider == provider_name and event.key_env:
+                s = stats.setdefault(event.key_env,
+                                     {"ok": 0, "fail": 0, "abort": 0})
+                cls = classify_outcome(event)
+                s[cls] += 1
+        
         for i, kenv in enumerate(key_envs):
             # Get last used from recent events
             last_used = None
@@ -170,10 +181,20 @@ class KeyManagementScreen:
                 if event.provider == provider_name and event.key_env == kenv:
                     last_used = event.timestamp
                     break
+            st = stats.get(kenv, {"ok": 0, "fail": 0, "abort": 0})
+            total = st["ok"] + st["fail"]
+            pct = (st["ok"] / total * 100) if total else None
+            hv = health_display(pct, total, st["fail"])
             keys.append({
                 "index": i,
                 "key_env": kenv,
                 "last_used": last_used,
+                "ok": st["ok"],
+                "fail": st["fail"],
+                "abort": st["abort"],
+                "icon": hv.icon,
+                "status": hv.status,
+                "color": hv.text_color,
             })
         return keys
 
@@ -445,7 +466,7 @@ class KeyManagementScreen:
                     term.write(y, 4, f"  [{idx}] {kenv:<44} {'●' if success else '✗'} {detail}", color)
                     y += 1
 
-            # Key table
+            # Key table — each row shows health icon + counts + status
             for i, key in enumerate(keys):
                 if y >= rows - 3:
                     break
@@ -459,8 +480,11 @@ class KeyManagementScreen:
                     last_str = "never"
                 
                 attr = curses.A_REVERSE if is_selected else 0
-                line = f"  [{key['index']}] {kenv_short:<50} last: {last_str}"
-                term.write(y, 2, line[:cols-4], attr | curses.color_pair(1))
+                counts = (f"ok:{key['ok']} fail:{key['fail']}" +
+                          (f" abort:{key['abort']}" if key["abort"] else ""))
+                line = (f"  [{key['index']}] {kenv_short:<34} "
+                        f"{key['icon']} {counts:<22} {key['status']:<14} last: {last_str}")
+                term.write(y, 2, line[:cols-4], attr | key["color"])
                 y += 1
                 
                 # Test result for this key

@@ -14,7 +14,6 @@ from routeops.screens.routes_curses import RoutesScreen
 from routeops.screens.history_curses import HistoryScreen
 from routeops.screens.diagnostics_curses import DiagnosticsScreen
 from routeops.screens.settings_curses import SettingsScreen
-from routeops.screens.perkey_curses import PerKeyHealthScreen
 from routeops.screens.keymgmt_curses import KeyManagementScreen
 
 
@@ -22,7 +21,6 @@ class NavigationShell:
     """Main navigation shell managing screen routing and input."""
 
     # Add new screen types (accessed from within other screens)
-    PERKEY = "perkey"
     KEYMGMT = "keymgmt"
 
     # Cycle order: Overview -> Providers -> Routes -> History -> Diag -> Settings
@@ -93,7 +91,6 @@ class NavigationShell:
         self.screens[ScreenType.HISTORY] = HistoryScreen(self.app_state)
         self.screens[ScreenType.DIAGNOSTICS] = DiagnosticsScreen(self.app_state)
         self.screens[ScreenType.SETTINGS] = SettingsScreen(self.app_state)
-        self.screens[self.PERKEY] = PerKeyHealthScreen(self.app_state)
         self.screens[self.KEYMGMT] = KeyManagementScreen(self.app_state)
 
     def _render_current(self) -> None:
@@ -113,9 +110,6 @@ class NavigationShell:
             handled = screen.handle_key(key)
             if handled == "keymgmt":
                 self._enter_provider_screen(self.KEYMGMT)
-                return True
-            if handled == "perkey":
-                self._enter_provider_screen(self.PERKEY)
                 return True
             if handled:
                 return True
@@ -185,8 +179,8 @@ class NavigationShell:
             self.current_screen = self.SCREEN_CYCLE[nxt]
 
     def _enter_provider_screen(self, screen_id) -> None:
-        """Enter keymgmt/perkey with selection synced to the provider the
-        user had highlighted (app_state.detail_target). Both screens sort
+        """Enter keymgmt with selection synced to the provider the user
+        had highlighted (app_state.detail_target). The screen sorts
         providers identically (routed-count desc), so the index transfers."""
         screen = self.screens.get(screen_id)
         target = getattr(self.app_state, "detail_target", None)
@@ -199,8 +193,8 @@ class NavigationShell:
                 pass
         from_screen = self.current_screen
         self.current_screen = screen_id
-        # Back-stack: entering keymgmt/perkey records the screen we came
-        # from so Esc returns there, not to Overview.
+        # Back-stack: entering keymgmt records the screen we came from so
+        # Esc returns there, not to Overview.
         self._push_nav(from_screen)
         # When opened FROM a provider's detail view, drop the user straight
         # into that provider's keys (not the all-providers list).
@@ -208,8 +202,5 @@ class NavigationShell:
             if screen is not None:
                 if screen_id == "keymgmt" and hasattr(screen, "show_detail"):
                     screen.show_detail = True
-                    screen._entered_from_detail = True
-                elif screen_id == "perkey" and hasattr(screen, "show_key_detail"):
-                    screen.show_key_detail = True
                     screen._entered_from_detail = True
             self.app_state._from_provider_detail = False

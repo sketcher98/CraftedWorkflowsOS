@@ -2,7 +2,7 @@
 """Headless render check for RouteOps screens (no TTY needed).
 
 Usage: python3 routeops/tools/render_check.py [screen ...]
-Screens: overview providers routes history diagnostics settings perkey keymgmt
+Screens: overview providers routes history diagnostics settings keymgmt
 
 Renders each screen against the LIVE runtime (real /health, config.json,
 router-events.jsonl) into a grid-dict MockTerm and prints the result.
@@ -59,7 +59,6 @@ SCREENS = {
     'history': ('routeops.screens.history_curses', 'HistoryScreen'),
     'diagnostics': ('routeops.screens.diagnostics_curses', 'DiagnosticsScreen'),
     'settings': ('routeops.screens.settings_curses', 'SettingsScreen'),
-    'perkey': ('routeops.screens.perkey_curses', 'PerKeyHealthScreen'),
     'keymgmt': ('routeops.screens.keymgmt_curses', 'KeyManagementScreen'),
 }
 

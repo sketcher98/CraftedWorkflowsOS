@@ -96,13 +96,6 @@ class ProvidersScreen:
                 return "keymgmt"
             return True
 
-        if key == ord('i'):  # Per-Key Health — inside provider detail only
-            if self.show_detail and providers:
-                self.app_state.detail_target = providers[self.selected_index]
-                self.app_state._from_provider_detail = True
-                return "perkey"
-            return True
-
         return False
 
     def _test_selected(self, providers: List[str]) -> None:
@@ -184,9 +177,9 @@ class ProvidersScreen:
                     row_c = curses.color_pair(2) if "● live" in tl else curses.color_pair(4)
                     seg_lines[len(detail_lines)] = [(tl, row_c)]
                     detail_lines.append("")
-            # Actions live INSIDE the provider screen: t/m/i.
+            # Actions live INSIDE the provider screen: t/m.
             detail_lines.append("")
-            detail_lines.append("[t]=probe keys  [m]=keys  [i]=per-key  [Esc]=back to provider list")
+            detail_lines.append("[t]=probe keys  [m]=key management  [Esc]=back to provider list")
             self._render_detail_box(term, y, cols, f"DETAIL: {provider_name}",
                                     detail_lines, seg_lines)
         else:
