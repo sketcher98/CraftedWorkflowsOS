@@ -589,7 +589,7 @@ class RoutesScreen:
         title = f"ROUTES  [{len(prefs)} preferences]"
         hint = ("[Tab]=pref  [e]=edit  [a]=add  [d]=del  [n]=rename  "
                 "[x]=test  [o]=providers  [j/k]=order")
-        short_hint = "[Tab]=pref  [e]=edit  [a]=add  [d]=del  [Esc]=back"
+        short_hint = "[Tab]=pref  [e]=edit  [a]=add  [d]=del  [n]=rename  [Esc]=back"
         room = cols - (3 + len(title)) - 6
         if len(hint) > room:
             hint = short_hint if len(short_hint) <= room else "[Esc]=back"
@@ -602,7 +602,6 @@ class RoutesScreen:
 
         if not prefs:
             term.write(y, 0, "No preferences configured — press [a] to add one", curses.color_pair(5))
-            self._render_key_help(term, rows - 2, cols)
             self._render_disclaimer(term, rows - 1, cols)
             return
 
@@ -690,20 +689,12 @@ class RoutesScreen:
 
         # Restart-needed banner — only meaningful when the auto-restart
         # FAILED. On success, _auto_restart_router() clears need_restart.
+        self._render_disclaimer(term, rows - 1, cols)
         if self.editor.need_restart:
             term.write(rows - 4, 0,
                        "⚠ ROUTER RESTART FAILED — start it manually: "
                        "bash ~/CraftedWorkflowsOS/router/scripts/startr",
                        curses.color_pair(4) | curses.A_BOLD)
-
-        self._render_key_help(term, rows - 2, cols)
-        self._render_disclaimer(term, rows - 1, cols)
-
-    def _render_key_help(self, term, y: int, cols: int) -> None:
-        help_text = ("[Tab]=next pref  [e]=edit  [a]=add model  [d]=delete  "
-                     "[n]=rename  [x]=test route  [o]=providers  [j/k]=move pref order  "
-                     "[←/→]=scroll  [q]=quit")
-        term.write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
 
     def _render_disclaimer(self, term, y: int, cols: int) -> None:
         disclaimer = ("EDITOR ACTIVE  |  writes config.json with .bak backup  |  "
