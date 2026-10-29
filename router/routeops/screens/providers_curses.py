@@ -150,7 +150,7 @@ class ProvidersScreen:
         
         if key == ord('m'):  # Key Management — inside provider detail only
             if self.show_detail and providers:
-                self.app_state.detail_target = providers[self.selected_index]
+                self.app_state.detail_target = self._selected_provider_row()["name"]
                 # open straight into THIS provider's keys (not all-providers)
                 self.app_state._from_provider_detail = True
                 return "keymgmt"
@@ -288,7 +288,7 @@ class ProvidersScreen:
                              "base_url": p.get("base_url", ""),
                              "key_env": next(iter(p.get("key_envs") or []), p.get("key_env", "")),
                              "disabled": True})
-            rows.sort(key=lambda r: (r["disabled"], r["name"]))
+            rows.sort(key=lambda r: (r["disabled"], r["name"].lower()))
         except Exception:
             rows = [{"name": n, "base_url": "", "key_env": "", "disabled": False}
                     for n in self.app_state.providers]
@@ -447,10 +447,17 @@ class ProvidersScreen:
 
     def _test_selected(self, providers: List[str]) -> None:
         """Live-test ALL key pools of the selected provider, each individually.
-        Result: per-key status lines shown in the detail-style inline banner."""
+        Result: per-key status lines shown in the detail-style inline banner.
+        The provider name comes from the rendered row (self._selected_provider_row())
+        — NOT from the providers-list index, which diverged from the on-screen
+        order once disabled providers were included."""
         from routeops.adapters.config_editor import ConfigEditor
-        name = providers[self.selected_index]
-        pm = self.app_state.providers[name]
+        name = self._selected_provider_row()["name"]
+        pm = self.app_state.providers.get(name)
+        if pm is None:
+            self.test_result = f"TEST {name}: not available"
+            self.test_lines = None
+            return
         ce = ConfigEditor()
         key_envs = list(getattr(pm.config, 'key_envs', None) or
                         ([pm.config.key_env] if getattr(pm.config, 'key_env', '') else []))
@@ -511,7 +518,7 @@ class ProvidersScreen:
         # shows the provider name (the detail body already carries its own
         # action hint line).
         if self.show_detail and self.app_state.providers:
-            provider_name = self._sorted_providers()[self.selected_index]
+            provider_name = self._selected_provider_row()["name"]
             title = f"● PROVIDERS — DETAIL: {provider_name}"
         else:
             title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [x]=disable/enable  [d]=del  [Esc] Back"
@@ -534,7 +541,7 @@ class ProvidersScreen:
 
         if self.show_detail and self.app_state.providers:
             # Detail drawer
-            provider_name = self._sorted_providers()[self.selected_index]
+            provider_name = self._selected_provider_row()["name"]
             pm = self.app_state.providers[provider_name]
             detail_lines, seg_lines = self._build_detail_lines(pm, cols - 4)
             # Probe results (from [t]) render INSIDE the detail view — a
