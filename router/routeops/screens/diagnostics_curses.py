@@ -80,15 +80,23 @@ class DiagnosticsScreen:
         from routeops.tui.render_std import render_header, render_box
         y = render_header(term.write, self.app_state, y, cols, rows)
 
-        # Tab bar — active tab highlighted.
-        tab_str = "DIAGNOSTICS  "
-        term.write(y, 0, tab_str, curses.A_BOLD | curses.color_pair(1))
-        tx = len(tab_str)
+        # Title line: "DIAGNOSTICS" aligned with the tabs below (col 3),
+        # hint right-aligned; ruled below. The header rule above serves
+        # as the top border.
+        hint = "[1-7=tabs]  [h/Esc=back]"
+        term.write(y, 3, "DIAGNOSTICS", curses.A_BOLD | curses.color_pair(1))
+        term.write(y, cols - len(hint) - 1, hint[:cols - 2],
+                   curses.color_pair(5) | curses.A_DIM)
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
 
+        # Tab line: names only, directly under DIAGNOSTICS
+        tx = 3
         full_names = self.tab_names
         compact_names = ["Conn", "Lat", "Err", "Bin", "Dang", "Metr", "Tele"]
         names = full_names
-        est = sum(len(n) + 2 for n in names) + len(tab_str) + 4
+        est = sum(len(n) + 2 for n in names) + 3 + 4
         if est > cols:
             names = compact_names
 
@@ -100,8 +108,6 @@ class DiagnosticsScreen:
                 break
             term.write(y, tx, marker, attr)
             tx += len(marker) + 1
-        hint = "[1-7=tabs]  [h/Esc=back]"
-        term.write(y, cols - len(hint) - 1, hint, curses.color_pair(5) | curses.A_DIM)
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
