@@ -91,12 +91,15 @@ class ProvidersScreen:
         if key == ord('m'):  # Key Management — inside provider detail only
             if self.show_detail and providers:
                 self.app_state.detail_target = providers[self.selected_index]
+                # open straight into THIS provider's keys (not all-providers)
+                self.app_state._from_provider_detail = True
                 return "keymgmt"
             return True
 
         if key == ord('i'):  # Per-Key Health — inside provider detail only
             if self.show_detail and providers:
                 self.app_state.detail_target = providers[self.selected_index]
+                self.app_state._from_provider_detail = True
                 return "perkey"
             return True
 
@@ -170,6 +173,12 @@ class ProvidersScreen:
             provider_name = self._sorted_providers()[self.selected_index]
             pm = self.app_state.providers[provider_name]
             detail_lines, seg_lines = self._build_detail_lines(pm, cols - 4)
+            # Probe results (from [t]) render INSIDE the detail view — a
+            # banner only drawn on home was invisible while in detail.
+            if self.test_result and self.test_lines:
+                detail_lines.append("")
+                detail_lines.append(self.test_result)
+                detail_lines.extend(self.test_lines)
             # Actions live INSIDE the provider screen: t/m/i.
             detail_lines.append("")
             detail_lines.append("[t]=probe keys  [m]=keys  [i]=per-key  [Esc]=back to provider list")

@@ -202,3 +202,12 @@ class NavigationShell:
         # Back-stack: entering keymgmt/perkey records the screen we came
         # from so Esc returns there, not to Overview.
         self._push_nav(from_screen)
+        # When opened FROM a provider's detail view, drop the user straight
+        # into that provider's keys (not the all-providers list).
+        if getattr(self.app_state, "_from_provider_detail", False):
+            if screen is not None:
+                if screen_id == "keymgmt" and hasattr(screen, "show_detail"):
+                    screen.show_detail = True
+                elif screen_id == "perkey" and hasattr(screen, "show_key_detail"):
+                    screen.show_key_detail = True
+            self.app_state._from_provider_detail = False
