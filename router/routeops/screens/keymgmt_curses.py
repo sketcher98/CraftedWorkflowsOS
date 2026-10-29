@@ -102,8 +102,14 @@ class KeyManagementScreen:
             elif key == ord('d'):  # Delete key
                 self.mode = "confirm_remove"
                 return True
-            elif key == ord('t'):  # Test key
+            elif key == ord('t'):  # Test selected key
                 self._test_selected_key(providers)
+                return True
+            elif key == ord('a'):  # Add key to THIS provider (from detail)
+                self.mode = "add_key"
+                self.new_key_env = ""
+                self.new_key_value = ""
+                self.input_field = 0
                 return True
             return True
 
@@ -347,6 +353,27 @@ class KeyManagementScreen:
         from routeops.adapters.config_editor import EnvEditor
         EnvEditor().set_var(key_env, value)
 
+    def _test_selected_key(self, providers: List[str]) -> None:
+        """Test ONLY the currently selected key of the selected provider."""
+        if not providers:
+            return
+        provider_name = providers[self.selected_provider]
+        pm = self.app_state.providers.get(provider_name)
+        if not pm or not pm.config:
+            return
+        keys = self._get_provider_keys(provider_name)
+        if not (0 <= self.selected_key < len(keys)):
+            return
+        ken = keys[self.selected_key]["key_env"]
+        from routeops.adapters.config_editor import ConfigEditor
+        ce = ConfigEditor()
+        r = ce.probe_catalog(pm.config.base_url, ken, timeout=15)
+        self.test_results = [(self.selected_key, ken, bool(r.get("ok")),
+                              f"{len(r['models'])} models" if r.get("ok")
+                              else r.get("error", "")[:40])]
+        self.test_verdict = "OK" if r.get("ok") else "FAIL"
+        self.test_provider = provider_name
+
     def _test_all_keys(self, providers: List[str]) -> None:
         """Test all keys of selected provider."""
         if not providers:
@@ -428,7 +455,7 @@ class KeyManagementScreen:
         # Title
         if self.show_detail:
             provider = providers[self.selected_provider] if providers else "Unknown"
-            title = f"● KEY MANAGEMENT: {provider}  [↑/↓]=key  [t]=test  [d]=delete  [Enter/Esc]=back"
+            title = f"● KEY MANAGEMENT: {provider}  [↑/↓]=key  [t]=test  [a]=add  [d]=delete  [Enter/Esc]=back"
         else:
             title = f"● KEY MANAGEMENT  [{len(providers)} providers]  [↑/↓]=provider  [Enter]=keys  [a]=add key  [t]=test all  [r]=refresh  [q/Esc]=Back"
         term.write(0, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
