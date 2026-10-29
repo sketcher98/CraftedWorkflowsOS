@@ -61,9 +61,23 @@ class OverviewScreen:
         return 1 + lc_h + 1 + ph_h + 1 + mh_h + 1 + le_h + 1 + sys_h + 2
 
     def handle_key(self, key: int) -> bool:
-        """Handle scroll keys. Returns True if handled.
-        NOTE: only arrows/PgUp/PgDn/Home/End and vim j/k — single letters
-        are reserved for screen navigation (d=Diagnostics, etc.)."""
+        """Handle scroll + page-tab keys. Returns True if handled, or a
+        "goto:<page>" sentinel that nav_shell converts into a screen switch.
+        NOTE: arrows ←/→ + 1-6 select the page tabs (like Settings/
+        Diagnostics); ↑/↓ scroll the overview content."""
+        page_order = ["overview", "providers", "routes", "history",
+                      "diagnostics", "settings"]
+        if key in (curses.KEY_LEFT,):
+            cur = 0
+            return f"goto:{page_order[(cur - 1) % len(page_order)]}"
+        if key in (curses.KEY_RIGHT,):
+            cur = 0
+            return f"goto:{page_order[(cur + 1) % len(page_order)]}"
+        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6')):
+            idx = int(chr(key)) - 1
+            if idx < len(page_order):
+                return f"goto:{page_order[idx]}"
+            return True
         if key in (curses.KEY_UP, ord('k'), ord('K')):
             self.scroll_y = max(0, self.scroll_y - 1)
             return True
@@ -100,6 +114,29 @@ class OverviewScreen:
         # Header
         y = self._render_header_clipped(write_vis, y, cols, rows)
 
+        # Title line + page tabs (same grammar as Settings/Diagnostics)
+        title = "OVERVIEW"
+        hint = "[↑/↓] scroll  [←/→] page  [q] quit"
+        write_vis(y, 3, title, curses.A_BOLD | curses.color_pair(1))
+        write_vis(y, cols - len(hint) - 1, hint, curses.color_pair(5) | curses.A_DIM)
+        y += 1
+        write_vis(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+        page_names = ["overview", "providers", "routes", "history",
+                      "diagnostics", "settings"]
+        tx = 3
+        for pi, pn in enumerate(page_names):
+            marker = f"[{pn.upper()}]" if pi == 0 else f" {pn} "
+            attr = (curses.color_pair(2) | curses.A_BOLD if pi == 0
+                    else curses.A_DIM)
+            if tx + len(marker) > cols - 2:
+                break
+            write_vis(y, tx, marker, attr)
+            tx += len(marker) + 1
+        y += 1
+        write_vis(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+
         # Last completed route (full width)
         y = self._render_box_clipped(write_vis, y, cols, "LAST COMPLETED REQUEST", 
                                     self._build_last_completed_lines(cols - 4), rows)
@@ -125,12 +162,7 @@ class OverviewScreen:
         y = self._render_box_clipped(write_vis, y, cols, "SYSTEM", 
                                     self._build_system_lines(cols - 4), rows)
 
-        # Key help (second to last line)
-        if 0 <= rows - 2 < rows:
-            write_vis(rows - 2, 0, " " * (cols - 2), 0)
-        self._render_key_help_clipped(write_vis, rows - 2, cols)
-
-        # Disclaimer (at bottom)
+        # Disclaimer (at bottom) — key help moved to the top tab row
         self._render_disclaimer_clipped(write_vis, rows - 1, cols)
 
     def _render_header_clipped(self, write, y: int, cols: int, rows: int) -> int:
@@ -142,12 +174,6 @@ class OverviewScreen:
         """Overview-standard boxed section (shared module)."""
         from routeops.tui.render_std import render_box
         return render_box(write, y, cols, title, lines, rows)
-
-    def _render_key_help_clipped(self, write, y: int, cols: int) -> None:
-        """Render key help with clipping."""
-        if 0 <= y < cols:
-            help_text = "[p] Providers  [r] Routes  [h] History  [d] Diagnostics  [s] Settings  [q] Quit  [↑/↓] Scroll  [←/→] Screen"
-            write(y, 0, help_text[:cols], curses.color_pair(5) | curses.A_DIM)
 
     def _render_disclaimer_clipped(self, write, y: int, cols: int) -> None:
         """Render disclaimer as a full-width colored bar (background fills the line).

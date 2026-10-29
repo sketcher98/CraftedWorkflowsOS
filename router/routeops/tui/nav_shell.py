@@ -111,6 +111,19 @@ class NavigationShell:
             if handled == "keymgmt":
                 self._enter_provider_screen(self.KEYMGMT)
                 return True
+            if isinstance(handled, str) and handled.startswith("goto:"):
+                goto = {
+                    "overview": ScreenType.OVERVIEW,
+                    "providers": ScreenType.PROVIDERS,
+                    "routes": ScreenType.ROUTES,
+                    "history": ScreenType.HISTORY,
+                    "diagnostics": ScreenType.DIAGNOSTICS,
+                    "settings": ScreenType.SETTINGS,
+                }.get(handled[5:])
+                if goto is not None and goto != self.current_screen:
+                    self._push_nav(self.current_screen)
+                    self.current_screen = goto
+                return True
             if handled:
                 return True
 
