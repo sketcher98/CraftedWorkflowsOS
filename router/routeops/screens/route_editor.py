@@ -44,6 +44,11 @@ class RouteEditor:
         self.pick_idx = 0
         self.need_restart = False
         self._moved_to: Optional[int] = None  # pref idx after a move_pref commit
+        # test bench state (initialized so views/keys work pre-open)
+        self.bench: List[tuple] = []
+        self.bench_sel: List[bool] = []
+        self.bench_idx = 0
+        self.bench_results = None
 
     # ------------------------------------------------------------- helpers
 

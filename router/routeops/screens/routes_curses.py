@@ -23,6 +23,9 @@ class RoutesScreen:
         self.horizontal_scroll = 0
         self.max_visible_providers = 10
         self.editor = RouteEditor(app_state)
+        # Top-level view tabs (Diagnostics/Settings grammar)
+        self.view_tab = 0  # 0 routes | 1 providers | 2 model test bench
+        self.view_names = ["routes", "providers", "model test bench"]
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(60, width)
@@ -37,29 +40,71 @@ class RoutesScreen:
         prefs = list(self.app_state.config.preferences) if self.app_state.config else []
         num_prefs = len(prefs)
 
-        if key == curses.KEY_LEFT:
-            self.horizontal_scroll = max(0, self.horizontal_scroll - 1)
+        if key == ord('['):  # matrix scroll left (Routes view)
+            if self.view_tab == 0:
+                self.horizontal_scroll = max(0, self.horizontal_scroll - 1)
             return True
 
-        if key == curses.KEY_RIGHT:
-            # Max scroll depends on number of providers
-            num_providers = len(self.app_state.providers) if self.app_state.providers else 0
-            max_scroll = max(0, num_providers - self.max_visible_providers)
-            self.horizontal_scroll = min(max_scroll, self.horizontal_scroll + 1)
+        if key == ord(']'):  # matrix scroll right (Routes view)
+            if self.view_tab == 0:
+                num_providers = len(self.app_state.providers) if self.app_state.providers else 0
+                max_scroll = max(0, num_providers - self.max_visible_providers)
+                self.horizontal_scroll = min(max_scroll, self.horizontal_scroll + 1)
             return True
 
-        if key == ord('	'):  # Tab
-            if num_prefs > 0:
+        # Top-level view tabs (editor closed): ←/→ and 1-3
+        if self.editor.mode == "closed":
+            if key in (curses.KEY_LEFT,):
+                self.view_tab = (self.view_tab - 1) % len(self.view_names)
+                self.horizontal_scroll = 0
+                self.current_pref_index = 0
+                return True
+            if key in (curses.KEY_RIGHT,):
+                self.view_tab = (self.view_tab + 1) % len(self.view_names)
+                self.horizontal_scroll = 0
+                self.current_pref_index = 0
+                return True
+            if key in (ord('1'), ord('2'), ord('3')):
+                idx = int(chr(key)) - 1
+                if idx < len(self.view_names):
+                    self.view_tab = idx
+                    self.horizontal_scroll = 0
+                    self.current_pref_index = 0
+                return True
+
+            # Providers view: ↑/↓ select a provider in the list
+            if self.view_tab == 1:
+                ed = self.editor
+                if key in (curses.KEY_UP, ord('k')):
+                    ed.pick_idx = max(0, ed.pick_idx - 1)
+                    return True
+                if key in (curses.KEY_DOWN, ord('j')):
+                    provs = ed._cfg_provs() if ed.ed else []
+                    ed.pick_idx = min(max(0, len(provs) - 1), ed.pick_idx + 1)
+                    return True
+            # Model Test Bench view: space toggle, r run, x clear, ↑/↓ slot
+            if self.view_tab == 2:
+                ed = self.editor
+                if key == ord(' '):
+                    ed.bench_toggle_selected()
+                    return True
+                if key == ord('r'):
+                    ed.bench_run()
+                    return True
+                if key == ord('x'):
+                    ed.bench_clear()
+                    return True
+                if key in (curses.KEY_UP, ord('k')):
+                    ed.bench_idx = max(0, ed.bench_idx - 1)
+                    return True
+                if key in (curses.KEY_DOWN, ord('j')):
+                    ed.bench_idx = min(len(getattr(ed, 'bench', []) or []) - 1, ed.bench_idx + 1)
+                    return True
+
+        if key == ord('	'):  # Tab: next preference (Routes view)
+            if num_prefs > 0 and self.view_tab == 0:
                 self.current_pref_index = (self.current_pref_index + 1) % num_prefs
                 self.horizontal_scroll = 0
-            return True
-
-        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7'), ord('8'), ord('9')):
-            if self.editor.mode == "closed":
-                idx = int(chr(key)) - 1
-                if idx < num_prefs:
-                    self.current_pref_index = idx
-                    self.horizontal_scroll = 0
             return True
 
         # --- Pending preference moves: Enter=save (diff gate), Esc=cancel ---
@@ -554,6 +599,47 @@ class RoutesScreen:
         # element and must NOT appear inside editor overlays.
         term.write(rows - 1, 0, actions[:cols - 1], curses.A_BOLD | curses.color_pair(4))
 
+    def _providers_view_body(self, rows: int, cols: int) -> list:
+        """Providers view body (mirrors the prov_mgmt overlay)."""
+        ed = self.editor
+        try:
+            cfg = ed.ed.load()
+        except Exception:
+            return ["config unreadable"]
+        provs = ed._cfg_provs(cfg)
+        dis = {p["name"] for p in cfg.get("disabled_providers", [])}
+        lines = [f"PROVIDERS — {len(provs)} configured ({len(dis)} disabled)", ""]
+        for i, p in enumerate(provs):
+            sel = ">" if i == ed.pick_idx else " "
+            state = "[DISABLED]" if p["name"] in dis else "[active]"
+            lines.append(f" {sel} {p['name']:<14} {state:<12} {p['base_url'][:44]}")
+        lines.append("")
+        lines.append("[↑/↓]=select  [m]=models  [c]=bench  [Esc]=close")
+        return lines
+
+    def _bench_view_body(self, rows: int, cols: int) -> list:
+        """Model Test Bench view body (mirrors the test_bench overlay)."""
+        ed = self.editor
+        slots = getattr(ed, "bench", []) or []
+        lines = [f"{len(slots)}/10 slots queued — space=toggle, r=run selected, x=clear", ""]
+        if not slots:
+            lines.append("  (empty — add via [o] providers → [m] models → c)")
+        for i, (pn, mdl) in enumerate(slots):
+            sel = ed.bench_sel[i] if getattr(ed, "bench_sel", None) else True
+            mark = "[x]" if sel else "[ ]"
+            cur = "▶" if i == getattr(ed, "bench_idx", 0) else " "
+            lines.append(f" {cur} {mark} [{i+1}] {pn} / {mdl}")
+        n_sel = sum(1 for s in (getattr(ed, "bench_sel", None) or [True] * len(slots)) if s)
+        lines.append("")
+        lines.append(f"  {n_sel}/{len(slots)} selected — r runs only those")
+        lines.append("")
+        if getattr(ed, "bench_results", None):
+            lines.append("RESULTS:")
+            for pn, mdl, r in ed.bench_results:
+                verdict = "✅ OK" if r.get("ok") else f"⚠️ {r.get('detail','')[:40]}"
+                lines.append(f"  {pn}/{mdl}: {verdict}")
+        return lines
+
     def render(self, term) -> None:
         """Render routes screen (or full-screen editor takeover)."""
         rows, cols = term.size.rows, term.size.cols
@@ -582,14 +668,14 @@ class RoutesScreen:
             prefs = [_PrefView(d) for d in pending_cfg.get("preferences", [])]
 
         # Overview-standard header line
-        from routeops.tui.render_std import render_header
+        from routeops.tui.render_std import render_header, render_box
         y = render_header(term.write, self.app_state, y, cols, rows)
 
         # Title line: ROUTES @3, hint right-aligned, ruled below
         title = f"ROUTES  [{len(prefs)} preferences]"
-        hint = ("[Tab]=pref  [e]=edit  [a]=add  [d]=del  [n]=rename  "
-                "[x]=test  [o]=providers  [j/k]=order")
-        short_hint = "[Tab]=pref  [e]=edit  [a]=add  [d]=del  [n]=rename  [Esc]=back"
+        hint = ("[←/→]=view  [1-3]=view  [Tab]=pref  [e]=edit  [a]=add  "
+                "[d]=del  [n]=rename  [x]=test  [o]=providers  [j/k]=order")
+        short_hint = "[←/→]=view  [1-3]=view  [Tab]=pref  [e]=edit  [a]=add  [d]=del  [Esc]=back"
         room = cols - (3 + len(title)) - 6
         if len(hint) > room:
             hint = short_hint if len(short_hint) <= room else "[Esc]=back"
@@ -599,6 +685,32 @@ class RoutesScreen:
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
+
+        # Top-level view tabs (editor closed) — same grammar as Diagnostics
+        if self.editor.mode == "closed":
+            tx = 3
+            for vi, vn in enumerate(self.view_names):
+                marker = f"[{vn.upper()}]" if vi == self.view_tab else f" {vn} "
+                attr = (curses.color_pair(2) | curses.A_BOLD if vi == self.view_tab
+                        else curses.A_DIM)
+                if tx + len(marker) > cols - 2:
+                    break
+                term.write(y, tx, marker, attr)
+                tx += len(marker) + 1
+            y += 1
+            term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+            y += 1
+
+            if self.view_tab == 1:
+                y = render_box(term.write, y, cols, "PROVIDERS",
+                               self._providers_view_body(rows, cols), rows)
+                self._render_disclaimer(term, rows - 1, cols)
+                return
+            if self.view_tab == 2:
+                y = render_box(term.write, y, cols, "MODEL TEST BENCH",
+                               self._bench_view_body(rows, cols), rows)
+                self._render_disclaimer(term, rows - 1, cols)
+                return
 
         if not prefs:
             term.write(y, 0, "No preferences configured — press [a] to add one", curses.color_pair(5))
