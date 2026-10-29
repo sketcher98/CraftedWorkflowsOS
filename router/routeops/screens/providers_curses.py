@@ -448,9 +448,9 @@ class ProvidersScreen:
     def _test_selected(self, providers: List[str]) -> None:
         """Live-test ALL key pools of the selected provider, each individually.
         Result: per-key status lines shown in the detail-style inline banner.
-        The provider name comes from the rendered row (self._selected_provider_row())
-        — NOT from the providers-list index, which diverged from the on-screen
-        order once disabled providers were included."""
+        Runs on a daemon thread — probes take up to 15s each and must never
+        freeze the TUI. The provider name comes from the rendered row
+        (self._selected_provider_row()) — NOT from the providers-list index."""
         from routeops.adapters.config_editor import ConfigEditor
         name = self._selected_provider_row()["name"]
         pm = self.app_state.providers.get(name)
@@ -465,18 +465,29 @@ class ProvidersScreen:
             self.test_result = f"TEST {name}: no keys configured"
             self.test_lines = None
             return
-        lines = []
-        any_ok = False
-        for i, kenv in enumerate(key_envs):
-            r = ce.probe_catalog(pm.config.base_url, kenv, timeout=15)
-            if r.get("ok"):
-                lines.append(f"  [{i}] {kenv:<44} ● live ({len(r['models'])} models)")
-                any_ok = True
-            else:
-                lines.append(f"  [{i}] {kenv:<44} ✗ FAIL {r.get('error','')[:30]}")
-        verdict = "OK" if any_ok else "ALL KEYS DEAD"
-        self.test_result = f"CATALOG PROBE {name}: {verdict} — {len(key_envs)} pool(s):"
-        self.test_lines = lines
+        import threading
+        self.test_result = f"CATALOG PROBE {name}: testing {len(key_envs)} key pool(s) …"
+        self.test_lines = None
+
+        def run():
+            try:
+                lines = []
+                any_ok = False
+                for i, kenv in enumerate(key_envs):
+                    r = ce.probe_catalog(pm.config.base_url, kenv, timeout=15)
+                    if r.get("ok"):
+                        lines.append(f"  [{i}] {kenv:<44} ● live ({len(r['models'])} models)")
+                        any_ok = True
+                    else:
+                        lines.append(f"  [{i}] {kenv:<44} ✗ FAIL {r.get('error','')[:30]}")
+                verdict = "OK" if any_ok else "ALL KEYS DEAD"
+                self.test_result = f"CATALOG PROBE {name}: {verdict} — {len(key_envs)} pool(s):"
+                self.test_lines = lines
+            except Exception as e:
+                self.test_result = f"CATALOG PROBE {name}: probe error {str(e)[:50]}"
+                self.test_lines = None
+
+        threading.Thread(target=run, daemon=True).start()
 
     test_result = None
     test_lines = None
