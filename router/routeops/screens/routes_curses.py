@@ -176,7 +176,7 @@ class RoutesScreen:
                 ed.mb_to_bench()
                 return True
             if key == 27:
-                ed.mode = "closed"
+                ed.mode = "prov_mgmt"  # back to provider selection, NOT routes home
                 return True
             return True
         if ed.mode == "test_bench":
@@ -187,7 +187,7 @@ class RoutesScreen:
                 ed.bench_clear()
                 return True
             if key == 27:
-                ed.mode = "closed"
+                ed.mode = "prov_mgmt"  # back to provider selection, NOT routes home
                 return True
             return True
         if ed.mode == "edit":
@@ -375,12 +375,21 @@ class RoutesScreen:
             if ed.mb_result:
                 lines.append(f"  {ed.mb_result}")
                 lines.append("")
-            start = max(0, ed.mb_idx - (rows - 9))
-            for i in range(start, min(start + rows - 9, len(ed.mb_models))):
+            start = max(0, ed.mb_idx - (rows - 12))
+            for i in range(start, min(start + rows - 12, len(ed.mb_models))):
                 sel = ">" if i == ed.mb_idx else " "
                 lines.append(f" {sel} {ed.mb_models[i]}")
             lines.append("")
-            lines.append(f"  bench slots: {len(getattr(ed, 'bench', []) or [])}/4")
+            # Bench contents — not just a count: show what is queued
+            slots = getattr(ed, "bench", []) or []
+            if slots:
+                lines.append(f"  BENCH ({len(slots)}/4):")
+                for b, (pn, mdl) in enumerate(slots):
+                    cur = " ◀" if (pn == ed.mb_prov and mdl == (ed.mb_models[ed.mb_idx] if ed.mb_models else None)) else ""
+                    lines.append(f"    [{b+1}] {pn} / {mdl}{cur}")
+            else:
+                lines.append("  BENCH (0/4) — empty: [c] adds this model")
+            lines.append(f"  [c] adds '{ed.mb_models[ed.mb_idx] if ed.mb_models else '—'}' to bench")
         elif ed.mode == "test_bench":
             lines.append("TEST BENCH — up to 4 provider/model pairs")
             lines.append("")
