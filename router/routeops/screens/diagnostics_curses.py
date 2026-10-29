@@ -814,19 +814,35 @@ class DiagnosticsScreen:
         w = width - 4
 
         now = time.time()
-        if self._full_index is None or (now - getattr(self, "_full_last", 0)) > 10:
+        # First build runs ASYNC (full-file scan) — never freeze the TUI.
+        if self._full_index is None and not getattr(self, "_full_indexing", False):
+            self._full_indexing = True
+            self._full_last = now
             self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
+            import threading
+
+            def build():
+                try:
+                    self._full_index.refresh()
+                finally:
+                    self._full_indexing = False
+
+            threading.Thread(target=build, daemon=True).start()
+        elif not getattr(self, "_full_indexing", False) and \
+                (now - getattr(self, "_full_last", 0)) > 10:
             self._full_index.refresh()
             self._full_last = now
-        else:
-            self._full_index.refresh()
 
         idx = self._full_index
         lines.append("EVENT TYPES — full router-events.jsonl (all events)")
         lines.append("─" * w)
         lines.append("")
-        if not idx.counts:
-            lines.append("  no events indexed yet")
+        if getattr(self, "_full_indexing", False) or not idx.counts:
+            if getattr(self, "_full_indexing", False):
+                lines.append("  Indexing full event log (first open) …")
+                lines.append("  This happens once per routerops start — screen stays live.")
+            else:
+                lines.append("  no events indexed yet")
             return [line[:w] for line in lines]
 
         lines.append(f"  TOTAL events indexed: {idx.total_events}")
