@@ -136,10 +136,15 @@ class HistoryScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
-        # Title bar with filter
-        filter_display = f"[{self.filter_mode.upper()}]"
-        title = f"● HISTORY  {filter_display}  [f=filter]  [Enter=detail]  [h/Esc=back]"
-        term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
+        # Overview-standard header line
+        from routeops.tui.render_std import render_header, render_box
+        y = render_header(term.write, self.app_state, y, cols, rows)
+
+        # Title line: HISTORY @3, hint right-aligned, ruled below
+        hint = "[f]=filter  [Enter]=detail  [Esc]=back"
+        term.write(y, 3, "HISTORY", curses.A_BOLD | curses.color_pair(1))
+        term.write(y, cols - len(hint) - 1, hint[:cols - 2],
+                   curses.color_pair(5) | curses.A_DIM)
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
@@ -148,8 +153,9 @@ class HistoryScreen:
 
         # First-open full-file scan is async — show progress until ready
         if self._indexing:
-            term.write(y, 2, "Indexing full event log (first open) …", curses.color_pair(3) | curses.A_BOLD)
-            term.write(y + 1, 2, "This happens once per routerops start — the screen stays live.", curses.A_DIM)
+            body = [[("Indexing full event log (first open) …", curses.color_pair(3) | curses.A_BOLD)],
+                    [("This happens once per routerops start — the screen stays live.", curses.A_DIM)]]
+            y = render_box(term.write, y, cols, "EVENTS", body, rows)
             return
 
         if self.show_detail and events and self.selected_index < len(events):
@@ -163,10 +169,7 @@ class HistoryScreen:
             model_w = max(12, w_total - fixed - 10)
             header = (f"{'Time':<8}  {'Age':>5}  {'Type':<14}  {'Provider':<11}  "
                       f"{'Model':<{model_w}}  {'Status':<7}  {'Outcome'}")
-            term.write(y, 2, header[:cols-4], curses.color_pair(1) | curses.A_BOLD)
-            y += 1
-            term.write(y, 2, "─" * (cols - 4), curses.color_pair(1))
-            y += 1
+            body = [[(header, curses.color_pair(1) | curses.A_BOLD)]]
 
             # Events — colored rows, newest first
             visible_rows = rows - y - 3
@@ -174,12 +177,14 @@ class HistoryScreen:
             for i in range(self.scroll_offset, min(self.scroll_offset + visible_rows, len(events))):
                 event = events[i]
                 line, color = self._format_event_line(event, cols - 4, _now)
-
                 if i == self.selected_index:
-                    term.write(y, 2, f"▶ {line[:cols-6]}", curses.color_pair(9) | curses.A_BOLD)
+                    color = color | curses.color_pair(9) | curses.A_BOLD
+                    body.append([("▶ ", color), (line[:-2], color)])
                 else:
-                    term.write(y, 2, f"  {line[:cols-6]}", color)
-                y += 1
+                    body.append([("  ", 0), (line, color)])
+
+            y = render_box(term.write, y, cols,
+                           f"EVENTS — {self.filter_mode.upper()}", body, rows)
 
             # Scroll indicator — reports the TRUE file-wide total, not the
             # in-memory window size.
