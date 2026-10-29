@@ -54,6 +54,14 @@ class RoutesScreen:
                 self.horizontal_scroll = 0
             return True
 
+        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7'), ord('8'), ord('9')):
+            if self.editor.mode == "closed":
+                idx = int(chr(key)) - 1
+                if idx < num_prefs:
+                    self.current_pref_index = idx
+                    self.horizontal_scroll = 0
+            return True
+
         # --- Pending preference moves: Enter=save (diff gate), Esc=cancel ---
         # Must run BEFORE the generic Esc return so Esc cancels a staged
         # change instead of popping nav.
@@ -557,18 +565,6 @@ class RoutesScreen:
 
         y = 0
 
-        # Header (Overview style)
-        if self.app_state.last_refresh:
-            time_str = self.app_state.last_refresh.strftime("%H:%M:%S")
-        else:
-            time_str = "--:--:--"
-        left = "ROUTES  " + f"{len(list(self.app_state.config.preferences)) if self.app_state.config else 0} preferences"
-        term.write(y, 0, left, curses.color_pair(2) | curses.A_BOLD)
-        term.write(y, cols - len(time_str) - 2, time_str, curses.color_pair(5))
-        y += 1
-        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
-        y += 1
-
         prefs = list(self.app_state.config.preferences) if self.app_state.config else []
 
         # Show pending reorder state on tabs if moves staged
@@ -585,37 +581,57 @@ class RoutesScreen:
                     return iter(self.routes)
             prefs = [_PrefView(d) for d in pending_cfg.get("preferences", [])]
 
+        # Overview-standard header line
+        from routeops.tui.render_std import render_header
+        y = render_header(term.write, self.app_state, y, cols, rows)
+
+        # Title line: ROUTES @3, hint right-aligned, ruled below
+        title = f"ROUTES  [{len(prefs)} preferences]"
+        hint = ("[Tab]=pref  [e]=edit  [a]=add  [d]=del  [n]=rename  "
+                "[x]=test  [o]=providers  [j/k]=order")
+        short_hint = "[Tab]=pref  [e]=edit  [a]=add  [d]=del  [Esc]=back"
+        room = cols - (3 + len(title)) - 6
+        if len(hint) > room:
+            hint = short_hint if len(short_hint) <= room else "[Esc]=back"
+        term.write(y, 3, title, curses.A_BOLD | curses.color_pair(1))
+        term.write(y, cols - len(hint) - 1, hint[:cols - 2],
+                   curses.color_pair(5) | curses.A_DIM)
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+
         if not prefs:
             term.write(y, 0, "No preferences configured — press [a] to add one", curses.color_pair(5))
             self._render_key_help(term, rows - 2, cols)
             self._render_disclaimer(term, rows - 1, cols)
             return
 
-        # Preference tabs (boxed, Overview style) — active tab highlighted green
-        w = cols - 4
-        term.write(y, 0, f"┌ PREFERENCES {'─' * max(0, w - 13)}┐", curses.color_pair(1))
-        # render tabs as colored segments: active = green bold, inactive = dim
-        term.write(y + 1, 2, "│ ", curses.color_pair(1))
-        tx = 4
-        room = w - 2
+        # Preference tabs — selectable row @3 (Settings/Diagnostics grammar)
+        # Same spacing convention as Providers' view tabs; long names are
+        # truncated with an ellipsis so the active tab always stays visible.
+        tx = 3
         for i, pref in enumerate(prefs):
-            label = f"[{pref.name}]  " if i == self.current_pref_index else f" {pref.name}   "
+            name = pref.name
+            max_len = max(12, cols - tx - 8)
+            if len(name) > max_len:
+                name = name[:max_len - 1] + "…"
+            marker = f"[{name}]" if i == self.current_pref_index else f" {name} "
             attr = (curses.color_pair(2) | curses.A_BOLD if i == self.current_pref_index
                     else curses.A_DIM)
-            if room <= 0:
+            if tx + len(marker) > cols - 2:
                 break
-            term.write(y + 1, tx, label[:room], attr)
-            tx += len(label[:room])
-            room -= len(label[:room])
-        term.write(y + 1, w + 2, " │", curses.color_pair(1))
-        term.write(y + 2, 0, f"└{'─' * w}┘", curses.color_pair(1))
-        y += 3
+            term.write(y, tx, marker, attr)
+            tx += len(marker) + 1
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
 
         current_pref = prefs[self.current_pref_index]
 
         # Matrix box — header + colored cells via segment rendering
+        w = cols - 4
         header, model_segs = self._build_matrix_segments(current_pref, cols - 4)
-        box_title = f"ROUTES — {current_pref.name}"
+        box_title = f"ROUTES — {current_pref.name}"[:w - 6]
         term.write(y, 0, f"┌ {box_title} {'─' * max(0, w - len(box_title) - 2)}┐", curses.color_pair(1))
         my = y + 1
         # header row (bold cyan)
@@ -658,6 +674,16 @@ class RoutesScreen:
                     break
                 term.write(my, lx, text, attr)
                 lx += len(text)
+            term.write(my, w + 2, " │", curses.color_pair(1))
+            my += 1
+        # summary line (like Providers' Total:… row)
+        if my < rows - 3:
+            n_routed = len({r.provider for r in current_pref.routes})
+            n_models = len({r.model for r in current_pref.routes})
+            summary = (f"Providers in chain: {n_routed}  ·  Models: {n_models}  ·  "
+                       f"[x]=test all providers × all keys")
+            term.write(my, 2, "│ ", curses.color_pair(1))
+            term.write(my, 4, summary[:w - 2], curses.color_pair(5) | curses.A_DIM)
             term.write(my, w + 2, " │", curses.color_pair(1))
             my += 1
         term.write(my, 0, f"└{'─' * w}┘", curses.color_pair(1))
