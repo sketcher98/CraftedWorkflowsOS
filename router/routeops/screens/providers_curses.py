@@ -139,9 +139,8 @@ class ProvidersScreen:
                 self.detail_scroll = 0
             return True
 
-        if key == ord('t'):  # probe selected provider (home AND detail)
-            row = self._selected_provider_row() if not self.show_detail else {"name": providers[self.selected_index] if providers else ""}
-            if row["name"]:
+        if key == ord('t'):  # probe keys — INSIDE provider detail only
+            if self.show_detail and providers:
                 self._test_selected(providers)
             return True
 
@@ -575,8 +574,8 @@ class ProvidersScreen:
             short_hint = "[t]=probe  [m]=keys  [Esc]=back"
         else:
             title = f"PROVIDERS  [{len(self.app_state.providers)} providers]"
-            hint = "[Enter]=detail  [t]=probe  [a]=add  [x]=disable/enable  [d]=del  [Esc]=back"
-            short_hint = "[Enter]=detail  [t]=probe  [a]=add  [Esc]=back"
+            hint = "[Enter]=detail  [x]=disable/enable  [d]=del  [Esc]=back"
+            short_hint = "[Enter]=detail  [x]=toggle  [d]=del  [Esc]=back"
         # Guard against hint/title collision on narrow terminals: use a
         # compact hint when the full one would overlap the title.
         room = cols - (3 + len(title)) - 6
