@@ -185,20 +185,34 @@ class RouteEditor:
     def open_model_browser(self, provider_name: str):
         self.mb_prov = provider_name
         self.mb_result = None
-        cfg = self.ed.load()
-        keys, base_url = self._keys_of(cfg, provider_name)
-        r = self.ed.probe_catalog(base_url, keys[0] if keys else "",
-                                  timeout=20)
-        if r.get("ok"):
-            self.mb_models = r["models"]
-            self.mb_idx = 0
-            self.mode = "model_browser"
-            self.msg = ("j/k=select  t=test model  a=route it  c=to bench  "
-                        "Esc=done")
-        else:
-            self.mode = "result"
-            self.probe_results = [f"{provider_name}: catalog probe failed — "
-                                  f"{r.get('error','')[:60]}"]
+        self.mb_models = []
+        self.mb_idx = 0
+        self.mode = "model_browser"
+        self.msg = "loading catalog …"
+        # Catalog probe can take up to 20s — never freeze the TUI.
+        import threading
+
+        def run():
+            try:
+                cfg = self.ed.load()
+                keys, base_url = self._keys_of(cfg, provider_name)
+                r = self.ed.probe_catalog(base_url, keys[0] if keys else "",
+                                          timeout=20)
+                if r.get("ok"):
+                    self.mb_models = r["models"]
+                    self.msg = ("j/k=select  t=test model  a=route it  c=to bench  "
+                                "Esc=done")
+                else:
+                    self.mb_models = []
+                    self.mode = "result"
+                    self.probe_results = [f"{provider_name}: catalog probe failed — "
+                                          f"{r.get('error','')[:60]}"]
+            except Exception as e:
+                self.mb_models = []
+                self.mode = "result"
+                self.probe_results = [f"{provider_name}: probe error {str(e)[:50]}"]
+
+        threading.Thread(target=run, daemon=True).start()
     def mb_test_model(self):
         if not (0 <= self.mb_idx < len(self.mb_models)):
             return
@@ -208,10 +222,22 @@ class RouteEditor:
         if not keys:
             self.mb_result = f"{model}: no keys configured"
             return
-        r = self.ed.test_key(base_url, keys[0], model, timeout=45)
-        self.mb_result = (f"{model} @ {keys[0]}: OK {r.get('code','')} · "
-                          f"{r.get('ms',0)}ms" if r.get("ok")
-                          else f"{model} @ {keys[0]}: FAIL {r.get('detail','')[:60]}")
+        # Run the network test on a daemon thread so the TUI never
+        # freezes — paint the pending state immediately.
+        import threading
+        self.mb_result = f"testing {model} @ {keys[0]} …"
+
+        def run():
+            try:
+                r = self.ed.test_key(base_url, keys[0], model, timeout=45)
+                self.mb_result = (
+                    f"{model} @ {keys[0]}: OK {r.get('code','')} · "
+                    f"{r.get('ms',0)}ms" if r.get("ok")
+                    else f"{model} @ {keys[0]}: FAIL {r.get('detail','')[:60]}")
+            except Exception as e:
+                self.mb_result = f"{model} @ {keys[0]}: test error {str(e)[:50]}"
+
+        threading.Thread(target=run, daemon=True).start()
 
     def mb_stage_pref(self):
         if not (0 <= self.mb_idx < len(self.mb_models)):
@@ -658,26 +684,42 @@ class RouteEditor:
             self.route_test_result = [f"{route['provider']}/{model}: no keys configured"]
             self.msg = "test complete"
             return
-        lines = []
-        lines.append(f"ROUTE TEST — {route['provider']} / {model}")
-        lines.append(f"    {base_url}")
-        lines.append("")
-        ok_n = 0
-        for i, kenv in enumerate(key_envs):
-            r = self.ed.test_key(base_url, kenv, model)
-            ok = r.get("ok")
-            if ok:
-                ok_n += 1
-            mark = "●" if ok else "✗"
-            lines.append(f"  [{i}] {kenv:<40} {mark} "
-                         f"{'OK' if ok else 'FAIL'} "
-                         f"{r.get('code','')} · {r.get('ms',0)}ms")
-            if not ok:
-                lines.append(f"        {r.get('detail','')[:90]}")
-        lines.append("")
-        lines.append(f"{ok_n}/{len(key_envs)} key pools OK")
-        self.route_test_result = lines
-        self.msg = "test complete"
+        # Run on a daemon thread — tests can take 20-45s each and must
+        # never freeze the TUI. Pending state paints immediately.
+        import threading
+        self.route_test_result = [f"ROUTE TEST — {route['provider']} / {model}",
+                                  f"    {base_url}", "",
+                                  f"testing {len(key_envs)} key pool(s) …"]
+        self.msg = "testing…"
+
+        def run():
+            try:
+                lines = []
+                lines.append(f"ROUTE TEST — {route['provider']} / {model}")
+                lines.append(f"    {base_url}")
+                lines.append("")
+                ok_n = 0
+                for i, kenv in enumerate(key_envs):
+                    r = self.ed.test_key(base_url, kenv, model)
+                    ok = r.get("ok")
+                    if ok:
+                        ok_n += 1
+                    mark = "●" if ok else "✗"
+                    lines.append(f"  [{i}] {kenv:<40} {mark} "
+                                 f"{'OK' if ok else 'FAIL'} "
+                                 f"{r.get('code','')} · {r.get('ms',0)}ms")
+                    if not ok:
+                        lines.append(f"        {r.get('detail','')[:90]}")
+                lines.append("")
+                lines.append(f"{ok_n}/{len(key_envs)} key pools OK")
+                self.route_test_result = lines
+                self.msg = "test complete"
+            except Exception as e:
+                self.route_test_result = [f"ROUTE TEST — {route['provider']} / {model}",
+                                          f"test error: {str(e)[:80]}"]
+                self.msg = "test failed"
+
+        threading.Thread(target=run, daemon=True).start()
 
     def cancel(self):
         self.pending = None
