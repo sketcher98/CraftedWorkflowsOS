@@ -372,13 +372,14 @@ class RoutesScreen:
         elif ed.mode == "model_browser":
             lines.append(f"MODELS — {ed.mb_prov}  ({len(ed.mb_models)} live)")
             lines.append("")
+            if ed.mb_result:
+                lines.append(f"  {ed.mb_result}")
+                lines.append("")
             start = max(0, ed.mb_idx - (rows - 9))
             for i in range(start, min(start + rows - 9, len(ed.mb_models))):
                 sel = ">" if i == ed.mb_idx else " "
                 lines.append(f" {sel} {ed.mb_models[i]}")
             lines.append("")
-            if ed.mb_result:
-                lines.append(f"  {ed.mb_result}")
             lines.append(f"  bench slots: {len(getattr(ed, 'bench', []) or [])}/4")
         elif ed.mode == "test_bench":
             lines.append("TEST BENCH — up to 4 provider/model pairs")

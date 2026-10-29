@@ -205,10 +205,13 @@ class RouteEditor:
         model = self.mb_models[self.mb_idx]
         cfg = self.ed.load()
         keys, base_url = self._keys_of(cfg, self.mb_prov)
-        r = self.ed.test_key(base_url, keys[0] if keys else "", model,
-                             timeout=45)
-        self.mb_result = (f"{model}: OK 200" if r.get("ok")
-                          else f"{model}: FAIL {r.get('detail','')[:50]}")
+        if not keys:
+            self.mb_result = f"{model}: no keys configured"
+            return
+        r = self.ed.test_key(base_url, keys[0], model, timeout=45)
+        self.mb_result = (f"{model} @ {keys[0]}: OK {r.get('code','')} · "
+                          f"{r.get('ms',0)}ms" if r.get("ok")
+                          else f"{model} @ {keys[0]}: FAIL {r.get('detail','')[:60]}")
 
     def mb_stage_pref(self):
         if not (0 <= self.mb_idx < len(self.mb_models)):
@@ -645,15 +648,35 @@ class RouteEditor:
                      if p["name"] == route["provider"]), None)
         if not prov:
             return
+        # Detailed test: EVERY key pool of this provider, live.
+        key_envs = list(prov.get("key_envs") or []) or \
+            ([prov["key_env"]] if prov.get("key_env") else [])
+        base_url = prov.get("base_url", "")
+        model = route["model"]
         self.mode = "result"
-        self.msg = f"testing {route['provider']}/{route['model']} ..."
-        r = self.ed.test_key(prov["base_url"], prov.get("key_env", ""),
-                             route["model"])
-        # R9: separate state — never write into probe_results (search uses
-        # that; a route test must not clobber a pending search).
-        self.route_test_result = [f"{route['provider']}/{route['model']}: "
-                                  + ("OK — key works" if r["ok"]
-                                     else f"FAIL {r['detail']}")]
+        if not key_envs:
+            self.route_test_result = [f"{route['provider']}/{model}: no keys configured"]
+            self.msg = "test complete"
+            return
+        lines = []
+        lines.append(f"ROUTE TEST — {route['provider']} / {model}")
+        lines.append(f"    {base_url}")
+        lines.append("")
+        ok_n = 0
+        for i, kenv in enumerate(key_envs):
+            r = self.ed.test_key(base_url, kenv, model)
+            ok = r.get("ok")
+            if ok:
+                ok_n += 1
+            mark = "●" if ok else "✗"
+            lines.append(f"  [{i}] {kenv:<40} {mark} "
+                         f"{'OK' if ok else 'FAIL'} "
+                         f"{r.get('code','')} · {r.get('ms',0)}ms")
+            if not ok:
+                lines.append(f"        {r.get('detail','')[:90]}")
+        lines.append("")
+        lines.append(f"{ok_n}/{len(key_envs)} key pools OK")
+        self.route_test_result = lines
         self.msg = "test complete"
 
     def cancel(self):

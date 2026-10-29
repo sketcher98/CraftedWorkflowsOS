@@ -325,12 +325,15 @@ class ConfigEditor:
 
     def test_key(self, base_url: str, key_env: str, model: str,
                  timeout: float = 45.0) -> Dict:
-        """Fire a 1-token test request. Returns {'ok': bool, 'detail': str}."""
+        """Fire a 1-token test request. Returns {'ok': bool, 'detail': str,
+        'ms': int, 'code': str}."""
         body = json.dumps({
             "model": model,
             "messages": [{"role": "user", "content": "Say OK"}],
             "max_tokens": 5,
         })
+        import time as _time
+        t0 = _time.monotonic()
         try:
             out = self._curl_authed(f"{base_url.rstrip('/')}/chat/completions",
                                     key_env,
@@ -338,14 +341,18 @@ class ConfigEditor:
                                      "-d", body],
                                     timeout)
             body_resp, _, code = out.rpartition("\n")
+            ms = int((_time.monotonic() - t0) * 1000)
             if code.strip() == "200":
-                return {"ok": True, "detail": "200 OK — key works"}
+                return {"ok": True, "detail": "200 OK — key works",
+                        "ms": ms, "code": "200"}
             return {"ok": False,
-                    "detail": f"HTTP {code.strip()}: {body_resp.strip()[:120]}"}
+                    "detail": f"HTTP {code.strip()}: {body_resp.strip()[:120]}",
+                    "ms": ms, "code": code.strip()}
         except subprocess.TimeoutExpired:
-            return {"ok": False, "detail": f"timeout after {timeout:.0f}s (hang)"}
+            return {"ok": False, "detail": f"timeout after {timeout:.0f}s (hang)",
+                    "ms": int(timeout * 1000), "code": "TIMEOUT"}
         except Exception as e:
-            return {"ok": False, "detail": str(e)[:150]}
+            return {"ok": False, "detail": str(e)[:150], "ms": 0, "code": "ERR"}
 
 
 # ---------------------------------------------------------------- router ctl
