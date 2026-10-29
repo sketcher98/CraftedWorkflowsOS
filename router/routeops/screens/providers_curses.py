@@ -28,6 +28,13 @@ class ProvidersScreen:
         self.mode = "closed"      # closed | add_prov | confirm_del
         self.input_buf = ""
         self.overlay_msg = ""
+        # add-provider wizard state (mirrors Hermes' custom endpoint wizard)
+        self.wiz_step = 0     # 0 url,1 key,2 verifying,3 model,4 name,5 confirm
+        self.wiz_url = ""
+        self.wiz_key = ""
+        self.wiz_models = []
+        self.wiz_model_idx = -1
+        self.wiz_name = ""
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(40, width)
@@ -51,23 +58,10 @@ class ProvidersScreen:
         providers = self._sorted_providers()
         max_index = len(providers) - 1
 
-        # ---- inline overlays: add provider / confirm delete ----
+        # ---- inline overlays: add provider wizard / confirm delete ----
         if self.mode == "add_prov":
-            if key in (10, 13, curses.KEY_ENTER):
-                if self.input_buf.strip():
-                    self._add_provider(self.input_buf.strip())
-                return True
-            if key in (8, 127, curses.KEY_BACKSPACE):
-                self.input_buf = self.input_buf[:-1]
-                return True
-            if 32 <= key <= 126:
-                self.input_buf += chr(key)
-                return True
-            if key == 27:
-                self.mode = "closed"
-                self.input_buf = ""
-                return True
-            return True
+            return self._wiz_key(key)
+
         if self.mode == "confirm_del":
             if key in (ord('y'), ord('Y')):
                 self._remove_selected_provider()
@@ -141,42 +135,113 @@ class ProvidersScreen:
 
         return False
 
-    def _add_provider(self, line: str):
-        """Add provider from 'name base_url key_env'. Validates env var,
-        probes the catalog, commits via ConfigEditor (backup->validate->
-        atomic). Mirrors the Routes editor's provider-add safety."""
-        from pathlib import Path
-        from routeops.adapters.config_editor import ConfigEditor
-        parts = line.split()
-        if len(parts) != 3:
-            self.overlay_msg = "need exactly: name base_url key_env"
-            return
-        name, base_url, key_env = parts
-        if not base_url.startswith("http"):
-            self.overlay_msg = "base_url must start with http(s)://"
-            return
-        env_path = Path.home() / ".hermes" / ".env"
-        if not env_path.exists() or key_env not in env_path.read_text(errors="replace"):
-            self.overlay_msg = f"key_env '{key_env}' not found in ~/.hermes/.env"
-            return
-        try:
-            ce = ConfigEditor()
-            cfg = ce.load()
-            names = {p["name"] for p in cfg.get("providers", [])}
-            if name in names:
-                self.overlay_msg = f"provider '{name}' already exists"
-                return
-            probe = ce.probe_catalog(base_url, key_env, timeout=15)
-            cfg["providers"].append({"name": name, "base_url": base_url,
-                                     "key_env": key_env, "key_envs": [key_env]})
-            ce.commit(cfg, f"add provider '{name}'")
+    def _wiz_key(self, key: int) -> bool:
+        """Key handling for the add-provider wizard."""
+        if key == 27:  # Esc cancels at any step
             self.mode = "closed"
             self.input_buf = ""
-            self.overlay_msg = (f"added '{name}' — probe: {len(probe['models'])} models"
-                                if probe.get("ok") else
-                                f"added '{name}' — probe FAILED ({probe.get('error','')[:40]})")
+            return True
+        if key in (10, 13, curses.KEY_ENTER):
+            self._wiz_next()
+            return True
+        if key in (8, 127, curses.KEY_BACKSPACE):
+            self.input_buf = self.input_buf[:-1]
+            return True
+        if 32 <= key <= 126:
+            self.input_buf += chr(key)
+            return True
+        return True
+
+    def _wiz_next(self):
+        """Advance the wizard one step."""
+        if self.wiz_step == 0:      # URL entered
+            url = self.input_buf.strip()
+            if not url.startswith("http"):
+                self.overlay_msg = "URL must start with http(s)://"
+                return
+            self.wiz_url = url.rstrip("/")
+            # auto default display name from the meaningful host segment
+            # (skip generic first parts like api/www)
+            host = url.split("//")[-1].split("/")[0]
+            parts = [p for p in host.split(".") if p and p.lower() not in ("api", "www")]
+            self.wiz_name = (parts[0].capitalize() if parts else host.split(".")[0].capitalize())
+            self.input_buf = ""
+            self.wiz_step = 1
+        elif self.wiz_step == 1:    # API key entered
+            if not self.input_buf.strip():
+                self.overlay_msg = "API key cannot be empty"
+                return
+            self.wiz_key = self.input_buf.strip()
+            self.input_buf = ""
+            self.wiz_step = 2
+            self._wiz_probe()
+        elif self.wiz_step == 2:    # probe done -> show models
+            self.wiz_step = 3
+        elif self.wiz_step == 3:    # model selected (or skip)
+            # allow typing a model name to filter, Enter = keep
+            self.wiz_step = 4
+            self.input_buf = ""
+        elif self.wiz_step == 4:    # display name
+            if self.input_buf.strip():
+                self.wiz_name = self.input_buf.strip()
+            self.input_buf = ""
+            self.wiz_step = 5
+            self._wiz_save()
+        elif self.wiz_step == 5:    # done
+            self.mode = "closed"
+            self.input_buf = ""
+            self.wiz_step = 0
+
+    def _wiz_probe(self):
+        """Probe the catalog and list models (step 2→3)."""
+        from routeops.adapters.config_editor import ConfigEditor
+        try:
+            ce = ConfigEditor()
+            r = ce.probe_catalog(self.wiz_url, self.wiz_key_env(), timeout=20)
+            if r.get("ok"):
+                self.wiz_models = r["models"]
+                self.overlay_msg = (f"Verified endpoint — {len(self.wiz_models)} model(s) visible")
+            else:
+                self.wiz_models = []
+                self.overlay_msg = f"Probe FAILED: {r.get('error','')[:60]} — still save?"
         except Exception as e:
-            self.overlay_msg = f"add failed: {e}"
+            self.overlay_msg = f"probe error: {str(e)[:60]}"
+
+    def _wiz_key_env(self) -> str:
+        """Derive the .env var name: HERMES_CUSTOM_API_<HOST_UNDERSCORED>_API_KEY.
+        Matches Hermes' convention: a leading 'api.'/'www.' is dropped, so
+        https://api.xkiro.com -> HERMES_CUSTOM_API_XKIRO_COM_API_KEY."""
+        import re
+        host = self.wiz_url.split("//")[-1].split("/")[0]
+        if host.lower().startswith(("api.", "www.")):
+            host = host.split(".", 1)[1]
+        stem = re.sub(r"[^A-Za-z0-9]", "_", host).upper().strip("_")
+        return f"HERMES_CUSTOM_API_{stem}_API_KEY"
+
+    def _wiz_save(self):
+        """Write .env + config.json (EnvEditor + ConfigEditor)."""
+        from routeops.adapters.config_editor import ConfigEditor, EnvEditor
+        try:
+            key_env = self._wiz_key_env()
+            EnvEditor().set_var(key_env, self.wiz_key)
+            ce = ConfigEditor()
+            cfg = ce.load()
+            names = {p.get("name") for p in cfg.get("providers", [])}
+            name = self.wiz_name
+            if name in names:
+                name = name + "2"
+            cfg.setdefault("providers", []).append({
+                "name": name, "base_url": self.wiz_url,
+                "key_env": key_env, "key_envs": [key_env],
+                "models_discovered": True,
+            })
+            ce.commit(cfg, f"add provider '{name}' via wizard")
+            self.overlay_msg = (f"API key saved to .env as {key_env}\n"
+                                f"Endpoint saved. Use /model in chat or 'hermes model' to set a model.")
+            self.wiz_models = []  # reset for next use
+            self.wiz_key = ""
+        except Exception as e:
+            self.overlay_msg = f"save failed: {str(e)[:80]}"
 
     def _remove_selected_provider(self):
         """Remove the selected provider — refused while any preference routes
@@ -204,6 +269,50 @@ class ProvidersScreen:
         except Exception as e:
             self.overlay_msg = f"remove failed: {e}"
             self.mode = "closed"
+
+    def _render_wiz(self, term, y: int, rows: int, cols: int) -> None:
+        """Render the add-provider wizard (step by step)."""
+        term.write(y, 0, "┌ ADD CUSTOM PROVIDER ───────────────────────────────────────────┐"[:cols], curses.color_pair(1))
+        y += 1
+        step = self.wiz_step
+        if step == 0:
+            term.write(y, 2, "Custom OpenAI-compatible endpoint configuration:", curses.A_BOLD)
+            y += 1
+            term.write(y, 2, "API base URL [e.g. https://api.example.com/v1]:", curses.color_pair(5))
+            y += 1
+            term.write(y, 2, f"> {self.input_buf}_", curses.color_pair(2) | curses.A_BOLD)
+        elif step == 1:
+            term.write(y, 2, "API key [sk-...]:", curses.color_pair(5))
+            y += 1
+            term.write(y, 2, f"> {'*' * len(self.input_buf)}_", curses.color_pair(2) | curses.A_BOLD)
+            y += 1
+            term.write(y, 2, f"endpoint: {self.wiz_url}", curses.A_DIM)
+        elif step == 2:
+            term.write(y, 2, "Verifying endpoint…", curses.color_pair(3) | curses.A_BOLD)
+            y += 1
+            if self.overlay_msg:
+                term.write(y, 2, self.overlay_msg[:cols-6], curses.color_pair(5))
+        elif step == 3:
+            term.write(y, 2, f"Verified endpoint — {len(self.wiz_models)} model(s) visible", curses.color_pair(2))
+            y += 1
+            term.write(y, 2, "Select a default model (Enter to skip — set later via /model):", curses.color_pair(5))
+            y += 1
+            for i, m in enumerate(self.wiz_models[:20]):
+                line = f"  {i+1}. {m}"
+                term.write(y, 2, line[:cols-6], curses.A_DIM)
+                y += 1
+            term.write(y, 2, f"> {self.input_buf}_", curses.color_pair(2) | curses.A_BOLD)
+        elif step == 4:
+            term.write(y, 2, "Display name [Enter to keep default]:", curses.color_pair(5))
+            y += 1
+            term.write(y, 2, f"default: {self.wiz_name}", curses.A_DIM)
+            y += 1
+            term.write(y, 2, f"> {self.input_buf}_", curses.color_pair(2) | curses.A_BOLD)
+        elif step == 5:
+            term.write(y, 2, self.overlay_msg[:cols-6], curses.color_pair(2) | curses.A_BOLD)
+            y += 1
+            term.write(y, 2, "(Enter to close)", curses.A_DIM)
+        term.write(rows - 1, 0, "[Enter]=next  [Esc]=cancel"[:cols], curses.color_pair(5) | curses.A_DIM)
 
     def _test_selected(self, providers: List[str]) -> None:
         """Live-test ALL key pools of the selected provider, each individually.
@@ -248,16 +357,9 @@ class ProvidersScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
-        # Inline overlays: add provider / confirm delete
+        # Inline overlays: add provider wizard / confirm delete
         if self.mode == "add_prov":
-            term.write(y, 0, "┌ ADD PROVIDER ────────────────────────────────────────────────┐"[:cols], curses.color_pair(1))
-            y += 1
-            term.write(y, 2, "format: name base_url key_env    (Enter=add, Esc=cancel)", curses.color_pair(5))
-            y += 1
-            term.write(y, 2, f"> {self.input_buf}_", curses.color_pair(2) | curses.A_BOLD)
-            y += 1
-            if self.overlay_msg:
-                term.write(y, 2, self.overlay_msg[:cols-6], curses.color_pair(3))
+            self._render_wiz(term, y, rows, cols)
             return
         if self.mode == "confirm_del":
             term.write(y, 0, "┌ DELETE PROVIDER ───────────────────────────────────────────────┐"[:cols], curses.color_pair(4))
