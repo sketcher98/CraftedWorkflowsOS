@@ -225,11 +225,13 @@ class RouteEditor:
         # Run the network test on a daemon thread so the TUI never
         # freezes — paint the pending state immediately.
         import threading
+        timeout, prompt = self._routeops_test_cfg()
         self.mb_result = f"testing {model} @ {keys[0]} …"
 
         def run():
             try:
-                r = self.ed.test_key(base_url, keys[0], model, timeout=45)
+                r = self.ed.test_key(base_url, keys[0], model,
+                                     timeout=timeout, prompt=prompt)
                 self.mb_result = (
                     f"{model} @ {keys[0]}: OK {r.get('code','')} · "
                     f"{r.get('ms',0)}ms" if r.get("ok")
@@ -661,6 +663,17 @@ class RouteEditor:
 
     # ------------------------------------------------------------ tests
 
+    def _routeops_test_cfg(self):
+        """Test knobs from config.json routeops block: timeout + prompt."""
+        try:
+            cfg = self.ed.load()
+            ro = cfg.get("routeops", {})
+            timeout = float(ro.get("test_timeout_seconds", 45))
+            prompt = str(ro.get("test_prompt", "Just Reply OK"))
+        except Exception:
+            timeout, prompt = 45.0, "Just Reply OK"
+        return timeout, prompt
+
     def test_current_route(self, pref_idx: int, route_idx: int):
         """Live-test the WHOLE preference: every route (provider/model) in it,
         EVERY key pool of each provider. Runs parallel on a daemon thread —
@@ -693,6 +706,7 @@ class RouteEditor:
             return
 
         n_prov = len({t[0] for t in tasks})
+        timeout, prompt = self._routeops_test_cfg()
         self.route_test_result = [
             f"ROUTE TEST — {pref_name}",
             f"    {n_prov} provider(s), {len(tasks)} key pool(s) — running parallel …"]
@@ -706,7 +720,7 @@ class RouteEditor:
                 results = {}
                 with ThreadPoolExecutor(max_workers=min(6, len(tasks))) as ex:
                     futs = {ex.submit(self.ed.test_key, base, kenv, model,
-                                      timeout=45): (pn, kenv)
+                                      timeout=timeout, prompt=prompt): (pn, kenv)
                             for pn, base, kenv, model in tasks}
                     for fut in futs:
                         pn, kenv = futs[fut]

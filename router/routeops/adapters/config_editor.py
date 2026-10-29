@@ -324,12 +324,13 @@ class ConfigEditor:
             return {"ok": False, "models": [], "error": str(e)[:120]}
 
     def test_key(self, base_url: str, key_env: str, model: str,
-                 timeout: float = 45.0) -> Dict:
+                 timeout: float = 45.0, prompt: str = "Just Reply OK") -> Dict:
         """Fire a 1-token test request. Returns {'ok': bool, 'detail': str,
-        'ms': int, 'code': str}."""
+        'ms': int, 'code': str}. The prompt is the test message sent —
+        configurable via config.json routeops.test_prompt."""
         body = json.dumps({
             "model": model,
-            "messages": [{"role": "user", "content": "Say OK"}],
+            "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 5,
         })
         import time as _time

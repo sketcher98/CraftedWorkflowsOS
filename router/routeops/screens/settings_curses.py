@@ -65,6 +65,24 @@ class SettingsScreen:
                 return True
             return True
 
+        # ---- text editing mode (routeops test_prompt) ----
+        if self.editing:
+            if key in (curses.KEY_ENTER, 10, 13):
+                self._stage_router_text("test_prompt", self.edit_buffer)
+                self.editing = False
+                return True
+            if key in (27, ord('q')):
+                self.editing = False
+                self._flash("prompt edit cancelled")
+                return True
+            if key in (8, 127, curses.KEY_BACKSPACE):
+                self.edit_buffer = self.edit_buffer[:-1]
+                return True
+            if 32 <= key <= 126:
+                self.edit_buffer += chr(key)
+                return True
+            return True
+
         # Tab switching
         if key in (ord("1"), ord("2"), ord("3")):
             self.current_tab = int(chr(key)) - 1
@@ -147,6 +165,7 @@ class SettingsScreen:
         except Exception:
             return []
         r = cfg.get("retry", {})
+        ro = cfg.get("routeops", {})
         rows = []
         # S2: continuation_max was removed from config (B-15) — no dead row.
         for key in ("failure_limit", "cooldown_seconds", "max_cooldown_seconds",
@@ -155,6 +174,12 @@ class SettingsScreen:
                     "hard_failed_wait_seconds", "max_hold_seconds"):
             rows.append({"type": "int", "key": key,
                          "label": key, "value": r.get(key, 0)})
+        # routeops test knobs (used by route/key tests; default 45s prompt)
+        rows.append({"type": "int", "key": "test_timeout_seconds",
+                     "label": "Test timeout (s)", "value": ro.get("test_timeout_seconds", 45)})
+        rows.append({"type": "text", "key": "test_prompt",
+                     "label": "Test prompt",
+                     "value": ro.get("test_prompt", "Just Reply OK")})
         return rows
 
     def _adjust(self, delta: int) -> None:
@@ -199,22 +224,34 @@ class SettingsScreen:
         except Exception:
             self._flash("Cannot read config")
             return
-        r = cfg.get("retry", {})
-        old = r.get(key, 0)
+        section = "routeops" if key in ("test_timeout_seconds",) else "retry"
+        target = cfg.setdefault(section, {})
+        old = target.get(key, 0)
         step = 1 if old < 10 else (5 if old < 60 else 10)
         new = max(0, old + delta * step)
         # S4: enforce sane minimums for timeout/limit knobs.
         mins = {"failure_limit": 1, "cooldown_seconds": 1,
                 "hard_failed_wait_seconds": 1, "all_failed_wait_seconds": 1,
                 "route_timeout_seconds": 1, "stream_idle_timeout_seconds": 1,
-                "first_event_timeout_seconds": 1}
+                "first_event_timeout_seconds": 1, "test_timeout_seconds": 5}
         if key in mins and new < mins[key]:
             new = mins[key]
             self._flash(f"{key}: minimum is {mins[key]} (staged)")
-        r[key] = new
-        cfg["retry"] = r
+        target[key] = new
         self.pending_cfg = cfg
         self._flash(f"{key}: {old} -> {new} (staged — Enter to review)")
+
+    def _stage_router_text(self, key: str, value: str) -> None:
+        """Stage a routeops text knob (test_prompt) via the diff gate."""
+        try:
+            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+        except Exception:
+            self._flash("Cannot read config")
+            return
+        ro = cfg.setdefault("routeops", {})
+        ro[key] = value
+        self.pending_cfg = cfg
+        self._flash(f"{key}: staged — Enter to review")
 
     def _activate(self) -> None:
         """Enter key: toggle bools, cycle enums, or open the staged diff."""
@@ -243,6 +280,11 @@ class SettingsScreen:
             self._flash(f"{item['label']}: {next_val}")
         elif item["type"] == "int":
             self._open_diff_preview()
+        elif item["type"] == "text":
+            # Enter on a text row starts inline editing; Enter again stages.
+            self.editing = True
+            self.edit_buffer = str(item.get("value", ""))
+            self._flash("type new value, Enter=stage, Esc=cancel")
 
     def _open_diff_preview(self) -> None:
         """Build diff lines from staged cfg and enter confirm mode."""
@@ -427,6 +469,7 @@ class SettingsScreen:
             return
 
         r = cfg.get("retry", {})
+        ro = cfg.get("routeops", {})
         lines = []
         # Confirm-gated edits; restart happens automatically on commit.
         lines.append(("RETRY & TIMEOUTS (+/- stages, Enter reviews diff, Enter commits)", False))
@@ -436,11 +479,15 @@ class SettingsScreen:
         editables = self._router_editables()
         for i, item in enumerate(editables):
             marker = "▶ " if self.cursor == i else "  "
-            val = r.get(item["key"], 0)
-            hold_note = ""
-            if item["key"] == "max_hold_seconds":
-                hold_note = " (hold-and-serve ON)" if (val or 0) > 0 else " (OFF)"
-            lines.append((f"{marker}{item['label']:<28} {val}{hold_note}", True))
+            if item["type"] == "text":
+                val = self.edit_buffer + "_" if (self.editing and i == self.cursor) else str(item["value"])
+                lines.append((f"{marker}{item['label']:<28} {val}", True))
+            else:
+                val = ro.get(item["key"], 0) if item["key"] in ("test_timeout_seconds",) else r.get(item["key"], 0)
+                hold_note = ""
+                if item["key"] == "max_hold_seconds":
+                    hold_note = " (hold-and-serve ON)" if (val or 0) > 0 else " (OFF)"
+                lines.append((f"{marker}{item['label']:<28} {val}{hold_note}", True))
 
         lines.append(("", False))
         # FIX: the router does NOT hot-reload — loadConfig() runs once at
