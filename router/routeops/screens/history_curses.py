@@ -99,6 +99,14 @@ class HistoryScreen:
             self.scroll_offset = 0
             return True
 
+        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
+            idx = int(chr(key)) - 1
+            if idx < len(self.filter_names):
+                self.filter_mode = self.filter_names[idx]
+                self.selected_index = 0
+                self.scroll_offset = 0
+            return True
+
         if key in (10, curses.KEY_ENTER):  # Enter
             if not self.show_detail and events:
                 self.show_detail = True
@@ -141,10 +149,24 @@ class HistoryScreen:
         y = render_header(term.write, self.app_state, y, cols, rows)
 
         # Title line: HISTORY @3, hint right-aligned, ruled below
-        hint = "[f]=filter  [Enter]=detail  [Esc]=back"
+        hint = "[1-7]=filter  [Enter]=detail  [Esc]=back"
         term.write(y, 3, "HISTORY", curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)
+        y += 1
+        term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+        y += 1
+
+        # Filter row — selectable like Settings/Diagnostics tabs (@3)
+        tx = 3
+        for name in self.filter_names:
+            marker = f"[{name.upper()}]" if name == self.filter_mode else f" {name} "
+            attr = (curses.color_pair(2) | curses.A_BOLD if name == self.filter_mode
+                    else curses.A_DIM)
+            if tx + len(marker) > cols - 2:
+                break
+            term.write(y, tx, marker, attr)
+            tx += len(marker) + 1
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
@@ -183,8 +205,7 @@ class HistoryScreen:
                 else:
                     body.append([("  ", 0), (line, color)])
 
-            y = render_box(term.write, y, cols,
-                           f"EVENTS — {self.filter_mode.upper()}", body, rows)
+            y = render_box(term.write, y, cols, "EVENTS", body, rows)
 
             # Scroll indicator — reports the TRUE file-wide total, not the
             # in-memory window size.
