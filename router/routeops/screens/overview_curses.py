@@ -134,76 +134,14 @@ class OverviewScreen:
         self._render_disclaimer_clipped(write_vis, rows - 1, cols)
 
     def _render_header_clipped(self, write, y: int, cols: int, rows: int) -> int:
-        """Render header with clipping."""
-        if self.app_state.last_refresh:
-            time_str = self.app_state.last_refresh.strftime("%H:%M:%S")
-        else:
-            time_str = "--:--:--"
-
-        # Router status is derived from the observed process identity, not a literal
-        proc = self.app_state.process_info
-        router_online = bool(proc and proc.identity == "PRODUCTION")
-        if router_online:
-            left = "● LIVE   Router: ONLINE"
-        elif proc:
-            left = f"● LIVE   Router: {proc.identity}"
-        else:
-            left = "● LIVE   Router: NOT OBSERVED"
-
-        if proc:
-            left += f"   PID: {self.app_state.process_info.pid}"
-            if self.app_state.process_info.uptime_display != "--":
-                left += f"   Up: {self.app_state.process_info.uptime_display}"
-            else:
-                left += f"   Up: --"
-        # Port comes from config.json (app_state.router_port), never a literal
-        left += f"   Port: {self.app_state.router_port}"
-
-        if self.app_state.paused:
-            left += "   ⏸ PAUSED"
-
-        if 0 <= y < rows:
-            write(y, 0, left, curses.color_pair(2) | curses.A_BOLD)
-        if 0 <= y < rows:
-            write(y, cols - len(time_str) - 2, time_str, curses.color_pair(5))
-        if 0 <= y + 1 < rows:
-            write(y + 1, 0, "─" * (cols - 2), curses.color_pair(1))
-
-        return y + 2
+        """Overview-standard header (shared module)."""
+        from routeops.tui.render_std import render_header
+        return render_header(write, self.app_state, y, cols, rows)
 
     def _render_box_clipped(self, write, y: int, cols: int, title: str, lines: list, rows: int) -> int:
-        """Render a box with clipping."""
-        w = cols - 4
-
-        # Top border
-        if 0 <= y < rows:
-            write(y, 0, f"┌ {title} {'─' * (w - len(title) - 2)}┐", curses.color_pair(1))
-
-        # Content lines
-        for i, line in enumerate(lines):
-            row = y + 1 + i
-            if 0 <= row < rows:
-                if isinstance(line, list):
-                    write(row, 2, "│ ", curses.color_pair(1))
-                    x = 4
-                    room = w - 2
-                    for text, attr in line:
-                        if room <= 0:
-                            break
-                        write(row, x, text[:room], attr)
-                        x += len(text[:room])
-                        room -= len(text[:room])
-                    # Right border
-                    write(row, w + 2, " │", curses.color_pair(1))
-                else:
-                    write(row, 2, f"│ {line[:w - 2].ljust(w - 2)} │")
-
-        # Bottom border
-        bottom_row = y + 1 + len(lines)
-        if 0 <= bottom_row < rows:
-            write(bottom_row, 0, "└" + "─" * w + "┘", curses.color_pair(1))
-
-        return y + 2 + len(lines)
+        """Overview-standard boxed section (shared module)."""
+        from routeops.tui.render_std import render_box
+        return render_box(write, y, cols, title, lines, rows)
 
     def _render_key_help_clipped(self, write, y: int, cols: int) -> None:
         """Render key help with clipping."""

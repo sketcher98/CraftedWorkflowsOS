@@ -343,6 +343,10 @@ class SettingsScreen:
             self._render_diff_confirm(term, y, rows, cols)
             return
 
+        # Overview-standard header line
+        from routeops.tui.render_std import render_header, render_box
+        y = render_header(term.write, self.app_state, y, cols, rows)
+
         # Tab bar — S6: same adaptive fix as Diagnostics; never clip tabs.
         term.write(y, 0, "SETTINGS  ", curses.A_BOLD | curses.color_pair(1))
         tx = 10
@@ -372,11 +376,14 @@ class SettingsScreen:
             y += 1
 
         if self.current_tab == 0:
-            self._render_monitor(term, y, rows, cols)
+            body = self._monitor_body(rows, cols)
+            y = render_box(term.write, y, cols, "MONITOR", body, rows)
         elif self.current_tab == 1:
-            self._render_router(term, y, rows, cols)
+            body = self._router_body(rows, cols)
+            y = render_box(term.write, y, cols, "ROUTER", body, rows)
         else:
-            self._render_paths(term, y, rows, cols)
+            body = self._paths_body(rows, cols)
+            y = render_box(term.write, y, cols, "PATHS", body, rows)
 
     def _render_diff_confirm(self, term, y: int, rows: int, cols: int) -> None:
         """Full-screen diff preview for staged router config changes."""
@@ -390,88 +397,69 @@ class SettingsScreen:
             y += 1
         term.write(y, 0, "└" + "─" * (w - 2) + "┘"[:cols])
 
-    def _render_monitor(self, term, y: int, rows: int, cols: int) -> None:
-        """Monitor tab: live-editable poll intervals + display toggles."""
-        w = cols - 6
+    def _monitor_body(self, rows: int, cols: int) -> list:
+        """Monitor tab body: live-editable poll intervals + display toggles."""
         runtime = getattr(self.app_state, "runtime", None)
         s = self.app_state.settings
 
-        lines = []  # (text, is_editable, current_value_str)
-        lines.append(("POLL INTERVALS (live — +/- to adjust, takes effect immediately)", False, ""))
-        lines.append(("", False, ""))
+        lines = []  # (text, is_editable)
+        lines.append(("POLL INTERVALS (live — +/- to adjust, takes effect immediately)", False))
+        lines.append(("", False))
 
         editables = self._monitor_editables()
         row_idx = 0
         for name in ("jsonl", "health", "models", "config", "process"):
             interval = POLL_INTERVALS.get(name, 0)
-            # Check live worker value
             if runtime and runtime.worker_manager:
                 wk = runtime.worker_manager.get_worker(name)
                 if wk:
                     interval = wk.interval
             marker = "▶ " if self.cursor == row_idx else "  "
-            lines.append((f"{marker}{name:<12} {interval:>6.1f}s", True, ""))
+            lines.append((f"{marker}{name:<12} {interval:>6.1f}s", True))
             row_idx += 1
 
-        lines.append(("", False, ""))
-        lines.append(("DISPLAY (live — Enter to toggle/cycle)", False, ""))
-        lines.append(("", False, ""))
+        lines.append(("", False))
+        lines.append(("DISPLAY (live — Enter to toggle/cycle)", False))
+        lines.append(("", False))
 
-        # auto_refresh
         marker = "▶ " if self.cursor == row_idx else "  "
-        val = "ON" if s.auto_refresh else "OFF"
-        lines.append((f"{marker}Auto-refresh    {val}", True, ""))
+        lines.append((f"{marker}Auto-refresh    {'ON' if s.auto_refresh else 'OFF'}", True))
+        row_idx += 1
+        marker = "▶ " if self.cursor == row_idx else "  "
+        lines.append((f"{marker}Disclaimers     {'ON' if s.show_disclaimers else 'OFF'}", True))
+        row_idx += 1
+        marker = "▶ " if self.cursor == row_idx else "  "
+        lines.append((f"{marker}Event density   {s.event_density}", True))
         row_idx += 1
 
-        # show_disclaimers
-        marker = "▶ " if self.cursor == row_idx else "  "
-        val = "ON" if s.show_disclaimers else "OFF"
-        lines.append((f"{marker}Disclaimers     {val}", True, ""))
-        row_idx += 1
+        lines.append(("", False))
+        lines.append(("Changes to poll intervals apply to the running workers", False))
+        lines.append(("immediately. Display settings affect this TUI session.", False))
 
-        # event_density
-        marker = "▶ " if self.cursor == row_idx else "  "
-        lines.append((f"{marker}Event density   {s.event_density}", True, ""))
-        row_idx += 1
-
-        lines.append(("", False, ""))
-        lines.append(("Changes to poll intervals apply to the running workers", False, ""))
-        lines.append(("immediately. Display settings affect this TUI session.", False, ""))
-
-        # Clamp cursor
         n_editable = row_idx
         if self.cursor >= n_editable:
             self.cursor = max(0, n_editable - 1)
 
-        visible = rows - y - 1
-        for i, (text, is_ed, _) in enumerate(lines):
-            if i < self.scroll_offset or i >= self.scroll_offset + visible:
-                continue
-            attr = curses.A_NORMAL
-            if is_ed and i == self.scroll_offset + (self.cursor - self.scroll_offset):
-                pass
-            row_y = y + i - self.scroll_offset
-            if row_y >= rows - 1:
-                break
-            if "▶" in text:
-                attr = curses.color_pair(2) | curses.A_BOLD
-            elif text.isupper() or text.startswith("POLL") or text.startswith("DISPLAY"):
-                attr = curses.A_BOLD | curses.color_pair(5)
-            term.write(row_y, 2, text[:w])
+        body = []
+        for text, is_ed in lines:
+            if is_ed and "▶" in text:
+                body.append([(text, curses.color_pair(2) | curses.A_BOLD)])
+            elif text.isupper() or text.startswith(("POLL", "DISPLAY")):
+                body.append([(text, curses.A_BOLD | curses.color_pair(5))])
+            else:
+                body.append(text)
+        return body
 
-    def _render_router(self, term, y: int, rows: int, cols: int) -> None:
-        """Router tab: retry/timeout settings, editable via +/-."""
-        w = cols - 6
+    def _router_body(self, rows: int, cols: int) -> list:
+        """Router tab body: retry/timeout settings, editable via +/-."""
         try:
             cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
         except Exception as e:
-            term.write(y, 2, f"Cannot read config.json: {e}")
-            return
+            return [f"Cannot read config.json: {e}"]
 
         r = cfg.get("retry", {})
         ro = cfg.get("routeops", {})
         lines = []
-        # Confirm-gated edits; restart happens automatically on commit.
         lines.append(("RETRY & TIMEOUTS (+/- stages, Enter reviews diff, Enter commits)", False))
         lines.append(("Commit auto-restarts the router — changes apply immediately", False))
         lines.append(("", False))
@@ -490,32 +478,25 @@ class SettingsScreen:
                 lines.append((f"{marker}{item['label']:<28} {val}{hold_note}", True))
 
         lines.append(("", False))
-        # FIX: the router does NOT hot-reload — loadConfig() runs once at
-        # startup. A confirmed commit (Enter -> diff -> Enter) restarts the
-        # router automatically; this line describes what happens on commit.
         lines.append(("On confirmed save: the router is restarted automatically.", False))
         lines.append(("Manual restart: bash ~/CraftedWorkflowsOS/router/scripts/startr", False))
 
-        # Clamp cursor
         n_editable = len(editables)
         if self.cursor >= n_editable:
             self.cursor = max(0, n_editable - 1)
 
-        visible = rows - y - 1
-        for i, (text, is_ed) in enumerate(lines):
-            row_y = y + i - self.scroll_offset
-            if row_y < y or row_y >= rows - 1:
-                continue
-            attr = curses.A_NORMAL
-            if "▶" in text:
-                attr = curses.color_pair(2) | curses.A_BOLD
+        body = []
+        for text, is_ed in lines:
+            if is_ed and "▶" in text:
+                body.append([(text, curses.color_pair(2) | curses.A_BOLD)])
             elif text.isupper() or text.startswith("RETRY"):
-                attr = curses.A_BOLD | curses.color_pair(5)
-            term.write(row_y, 2, text[:w])
+                body.append([(text, curses.A_BOLD | curses.color_pair(5))])
+            else:
+                body.append(text)
+        return body
 
-    def _render_paths(self, term, y: int, rows: int, cols: int) -> None:
-        """Paths tab: read-only info."""
-        w = cols - 6
+    def _paths_body(self, rows: int, cols: int) -> list:
+        """Paths tab body: read-only info."""
         lines = [
             "FILES",
             f"  Router config:   {ROUTER_CONFIG_JSON}",
@@ -533,9 +514,12 @@ class SettingsScreen:
             "",
             "RouteOps v0.2 — Phase 1B (editor + merged key tests)",
         ]
-        for i, text in enumerate(lines):
-            row_y = y + i
-            if row_y >= rows - 1:
-                break
-            attr = curses.A_BOLD | curses.color_pair(5) if text.isupper() else curses.A_NORMAL
-            term.write(row_y, 2, text[:w], attr)
+        body = []
+        for text in lines:
+            if text.isupper():
+                body.append([(text, curses.A_BOLD | curses.color_pair(5))])
+            else:
+                body.append(text)
+        return body
+
+    # (_render_paths removed — _paths_body builds the PATHS box body)

@@ -76,11 +76,11 @@ class DiagnosticsScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
+        # Overview-standard header line (router LIVE / pid / uptime / port + clock)
+        from routeops.tui.render_std import render_header, render_box
+        y = render_header(term.write, self.app_state, y, cols, rows)
+
         # Tab bar — active tab highlighted.
-        # FIX (D6): previously the hint reserved cols-22 and any tab beyond
-        # that was silently clipped — on narrow terminals the LAST tabs
-        # (Dangling Models, Metrics) were unreachable. Compact labels are
-        # used when the full names cannot all fit.
         tab_str = "DIAGNOSTICS  "
         term.write(y, 0, tab_str, curses.A_BOLD | curses.color_pair(1))
         tx = len(tab_str)
@@ -88,7 +88,6 @@ class DiagnosticsScreen:
         full_names = self.tab_names
         compact_names = ["Conn", "Lat", "Err", "Bin", "Dang", "Metr", "Tele"]
         names = full_names
-        # estimate width: each marker = name + brackets/spacing
         est = sum(len(n) + 2 for n in names) + len(tab_str) + 4
         if est > cols:
             names = compact_names
@@ -123,16 +122,12 @@ class DiagnosticsScreen:
         else:
             lines = self._build_binary_lines(cols - 4)
 
-        # Apply scroll — with per-line coloring: ✗/⚠/HARD/COOLDOWN red-yellow,
-        # ● ALL CLEAR green, section headings bold
-        visible_rows = rows - y - 2
-        for i in range(self.scroll_offset, min(self.scroll_offset + visible_rows, len(lines))):
-            raw = lines[i]
-            line = raw.ljust(cols - 6)[:cols - 6]
+        # Style each line into box segments (same coloring as before)
+        for i, raw in enumerate(lines):
             stripped = raw.lstrip()
             if stripped.startswith(("✗", "⚠")) or "HARD-FAILED" in raw:
                 attr = curses.color_pair(4) | curses.A_BOLD
-            elif "ALL CLEAR" in raw or "REACHABLE" in stripped and "UN" not in stripped:
+            elif "ALL CLEAR" in raw or ("REACHABLE" in stripped and "UN" not in stripped):
                 attr = curses.color_pair(2) | curses.A_BOLD
             elif "UNREACHABLE" in stripped or "UNREADABLE" in stripped or "NOT FOUND" in stripped:
                 attr = curses.color_pair(4) | curses.A_BOLD
@@ -144,8 +139,11 @@ class DiagnosticsScreen:
                 attr = curses.A_BOLD | curses.color_pair(5)
             else:
                 attr = curses.A_NORMAL
-            term.write(y, 2, f"│ {line} │", attr)
-            y += 1
+            lines[i] = [(raw, attr)]
+
+        visible_rows = rows - y - 3
+        body = lines[self.scroll_offset:self.scroll_offset + visible_rows]
+        y = render_box(term.write, y, cols, self.tab_names[self.current_tab].upper(), body, rows)
 
         # Scroll indicator
         if len(lines) > visible_rows:

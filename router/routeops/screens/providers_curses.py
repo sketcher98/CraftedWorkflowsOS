@@ -528,6 +528,9 @@ class ProvidersScreen:
         # Title bar — context-dependent: home shows list actions; detail
         # shows the provider name (the detail body already carries its own
         # action hint line).
+        from routeops.tui.render_std import render_header, render_box
+        y = render_header(term.write, self.app_state, y, cols, rows)
+
         if self.show_detail and self.app_state.providers:
             provider_name = self._selected_provider_row()["name"]
             title = f"● PROVIDERS — DETAIL: {provider_name}"
@@ -577,6 +580,7 @@ class ProvidersScreen:
             visible_rows = rows - y - 3
 
             shown = 0
+            body = []
             for i in range(self.scroll_offset, min(self.scroll_offset + visible_rows, len(rows_all))):
                 row = rows_all[i]
                 name = row["name"]
@@ -591,24 +595,15 @@ class ProvidersScreen:
                         segs.append((f" [DISABLED]", curses.color_pair(4) | curses.A_BOLD))
 
                 if i == self.selected_index:
-                    x = 0
-                    for text, attr in segs:
-                        term.write(y, x, text[:cols - x], attr | curses.color_pair(9) | curses.A_BOLD)
-                        x += len(text)
-                    for x in range(x, cols):
-                        term.write(y, x, " ", curses.color_pair(9))
-                else:
-                    x = 0
-                    for text, attr in segs:
-                        term.write(y, x, text[:cols - x], attr)
-                        x += len(text)
-                y += 1
+                    segs = [(t, a | curses.color_pair(9) | curses.A_BOLD) for t, a in segs]
+                body.append(segs)
                 shown += 1
 
             # Summary line — SAME accounting as the rendered rows. Counting by
             # /health alone made the summary claim 'OK: 3' while two rows
             # rendered DEGRADED — the summary must match what is on screen.
             n_total = len(rows_all)
+            summary = ""
             if n_total:
                 n_ok = n_cool = n_hard = n_noroute = n_deg = n_dis = 0
                 for row in rows_all:
@@ -652,8 +647,9 @@ class ProvidersScreen:
                     summary += f"  No-route: {n_noroute}"
                 if shown < n_total:
                     summary += f"  (showing {shown} of {n_total})"
-                term.write(y, 0, summary[:cols], curses.color_pair(5) | curses.A_DIM)
-                y += 1
+            body.append("")
+            body.append([(summary, curses.color_pair(5) | curses.A_DIM)])
+            y = render_box(term.write, y, cols, "PROVIDERS", body, rows)
 
             # Scroll indicator
             if len(rows_all) > visible_rows:
