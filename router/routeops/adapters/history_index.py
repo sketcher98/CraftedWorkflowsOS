@@ -51,6 +51,8 @@ class HistoryIndex:
         self._events: List[EventModel] = []
         # Counts per event type across the WHOLE file (not bounded)
         self._counts: Dict[str, int] = {}
+        # Newest timestamp per event type (whole file)
+        self._last_ts: Dict[str, str] = {}
         self._total = 0
         self._offset = 0        # byte offset of the last fully-read line
         self._inode: Optional[int] = None
@@ -66,6 +68,10 @@ class HistoryIndex:
     @property
     def counts(self) -> Dict[str, int]:
         return dict(self._counts)
+
+    @property
+    def last_ts(self) -> Dict[str, str]:
+        return dict(self._last_ts)
 
     @property
     def last_error(self) -> str:
@@ -104,6 +110,7 @@ class HistoryIndex:
     def _reset(self) -> None:
         self._events = []
         self._counts = {}
+        self._last_ts = {}
         self._total = 0
         self._offset = 0
         self._inode = None
@@ -181,6 +188,9 @@ class HistoryIndex:
     def _append(self, ev: EventModel) -> None:
         self._total += 1
         self._counts[ev.event_type] = self._counts.get(ev.event_type, 0) + 1
+        ts = ev.timestamp.isoformat(timespec="seconds") if ev.timestamp else ""
+        if ts:
+            self._last_ts[ev.event_type] = ts
         self._events.append(ev)
         # Bound memory: keep the NEWEST max_events
         if len(self._events) > self.max_events:

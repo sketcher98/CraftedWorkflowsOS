@@ -15,8 +15,8 @@ class DiagnosticsScreen:
 
     def __init__(self, app_state: AppState):
         self.app_state = app_state
-        self.current_tab = 0  # 0=connectivity, 1=latency, 2=errors, 3=binary, 4=dangling, 5=metrics
-        self.tab_names = ["Connectivity", "Latency", "Errors", "Binary", "Dangling Models", "Metrics"]
+        self.current_tab = 0  # 0=connectivity, 1=latency, 2=errors, 3=binary, 4=dangling, 5=metrics, 6=telemetry
+        self.tab_names = ["Connectivity", "Latency", "Errors", "Binary", "Dangling Models", "Metrics", "Telemetry"]
         self.scroll_offset = 0
         self._dangling_cache = None
         self._dangling_checked_at = None
@@ -31,13 +31,15 @@ class DiagnosticsScreen:
 
     def handle_key(self, key: int) -> bool:
         """Handle key press. Returns True if handled."""
-        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6')):
+        if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             self.current_tab = int(chr(key)) - 1
             self.scroll_offset = 0
             if self.current_tab == 4:
                 self._dangling_cache = None  # force rescan on tab entry
             elif self.current_tab == 5:
                 self._metrics_cache = None  # force refresh on tab entry
+            elif self.current_tab == 6:
+                self._full_index = None
             return True
 
         if key in (curses.KEY_LEFT, ord('h')):
@@ -47,15 +49,19 @@ class DiagnosticsScreen:
                 self._dangling_cache = None
             elif self.current_tab == 5:
                 self._metrics_cache = None
+            elif self.current_tab == 6:
+                self._full_index = None
             return True
 
         if key in (curses.KEY_RIGHT, ord('l')):
-            self.current_tab = min(5, self.current_tab + 1)
+            self.current_tab = min(6, self.current_tab + 1)
             self.scroll_offset = 0
             if self.current_tab == 4:
                 self._dangling_cache = None
             elif self.current_tab == 5:
                 self._metrics_cache = None
+            elif self.current_tab == 6:
+                self._full_index = None
             return True
 
         if key in (curses.KEY_UP, ord('k')):
@@ -86,7 +92,7 @@ class DiagnosticsScreen:
         tx = len(tab_str)
 
         full_names = self.tab_names
-        compact_names = ["Conn", "Lat", "Err", "Bin", "Dang", "Metr"]
+        compact_names = ["Conn", "Lat", "Err", "Bin", "Dang", "Metr", "Tele"]
         names = full_names
         # estimate width: each marker = name + brackets/spacing
         est = sum(len(n) + 2 for n in names) + len(tab_str) + 4
@@ -101,7 +107,7 @@ class DiagnosticsScreen:
                 break
             term.write(y, tx, marker, attr)
             tx += len(marker) + 1
-        hint = "[1-6=tabs]  [h/Esc=back]"
+        hint = "[1-7=tabs]  [h/Esc=back]"
         term.write(y, cols - len(hint) - 1, hint, curses.color_pair(5) | curses.A_DIM)
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
@@ -118,6 +124,8 @@ class DiagnosticsScreen:
             lines = self._build_dangling_lines(cols - 4)
         elif self.current_tab == 5:
             lines = self._build_metrics_lines(cols - 4)
+        elif self.current_tab == 6:
+            lines = self._build_telemetry_lines(cols - 4)
         else:
             lines = self._build_binary_lines(cols - 4)
 
@@ -791,3 +799,63 @@ class DiagnosticsScreen:
             metrics = {"error": f"Parse error: {e}"}
 
         return metrics
+
+    def _build_telemetry_lines(self, width: int) -> List[str]:
+        """GAP telemetry home: full-file per-event-type counts + newest
+        timestamp for every event type the router emits. Covers the GAP
+        event set (request_started/exhausted, client_abort, catalog_*,
+        credential_rotation_signal, route_committed, health_transition,
+        route_skipped) alongside the core route events."""
+        import time
+        from routeops.adapters.history_index import HistoryIndex
+        from routeops.config import ROUTER_EVENTS_JSONL
+
+        lines = []
+        w = width - 4
+
+        now = time.time()
+        if self._full_index is None or (now - getattr(self, "_full_last", 0)) > 10:
+            self._full_index = HistoryIndex(str(ROUTER_EVENTS_JSONL))
+            self._full_index.refresh()
+            self._full_last = now
+        else:
+            self._full_index.refresh()
+
+        idx = self._full_index
+        lines.append("EVENT TYPES — full router-events.jsonl (all events)")
+        lines.append("─" * w)
+        lines.append("")
+        if not idx.counts:
+            lines.append("  no events indexed yet")
+            return [line[:w] for line in lines]
+
+        lines.append(f"  TOTAL events indexed: {idx.total_events}")
+        lines.append("")
+
+        # GAP event types surface first (they are the ones the TUI now
+        # surfaces; core route events follow below).
+        gap_order = [
+            "request_started", "request_exhausted", "client_abort",
+            "catalog_refreshed", "catalog_skip", "credential_rotation_signal",
+            "route_committed", "health_transition", "route_skipped",
+        ]
+        counts = idx.counts
+        last_ts = idx.last_ts
+        shown_gap = 0
+        for t in gap_order:
+            if t in counts:
+                ts = last_ts.get(t, "")
+                if ts:
+                    ts = ts[11:19]  # HH:MM:SS from ISO datetime
+                lines.append(f"  {t:<28} {counts[t]:>7}   latest {ts}")
+                shown_gap += 1
+        if shown_gap:
+            lines.append("")
+        lines.append("  core events:")
+        core = sorted((t for t in counts if t not in gap_order), key=lambda t: -counts[t])
+        for t in core:
+            ts = last_ts.get(t, "")
+            if ts:
+                ts = ts[11:19]
+            lines.append(f"  {t:<28} {counts[t]:>7}   latest {ts}")
+        return [line[:w] for line in lines]

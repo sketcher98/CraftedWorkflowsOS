@@ -599,11 +599,12 @@ class RoutesScreen:
             term.write(my, 2, "│ ", curses.color_pair(1))
             lx = 4
             for text, attr in [("Legend: ", curses.A_DIM),
-                               ("●", curses.color_pair(2)), ("=healthy/never-yet  ", curses.A_DIM),
+                               ("●", curses.color_pair(2)), ("=healthy  ", curses.A_DIM),
                                ("◐", curses.color_pair(3)), ("=degraded  ", curses.A_DIM),
                                ("○", curses.color_pair(4)), ("=failing  ", curses.A_DIM),
+                               ("◎", curses.A_DIM), ("=never exercised  ", curses.A_DIM),
                                ("·", curses.A_DIM), ("=not configured  ", curses.A_DIM),
-                               ("(cells: JSONL when present, else /health)", curses.A_DIM)]:
+                               ("(cells: JSONL per-cell, else /health)", curses.A_DIM)]:
                 if lx + len(text) > w + 1:
                     break
                 term.write(my, lx, text, attr)
@@ -695,48 +696,3 @@ class RoutesScreen:
             rows_segs.append(segs)
         return header, rows_segs
 
-    def _build_matrix_lines(self, pref, cols: int) -> List[str]:
-        """Build matrix lines for a preference."""
-        lines = []
-        w = cols - 4
-        
-        providers = list(self.app_state.providers.keys())
-        provider_health = {name: pm.health for name, pm in self.app_state.providers.items()}
-        
-        # Header
-        header = "Model"
-        for p in providers[self.horizontal_scroll:self.horizontal_scroll + self.max_visible_providers]:
-            header += f"  {p[:10]:<10}"
-        lines.append(header[:w])
-        lines.append("─" * w)
-        
-        # Get all unique models for this preference
-        models = []
-        for route in pref.routes:
-            if route.model not in models:
-                models.append(route.model)
-        
-        # For each model, show which providers have it
-        for model in models:
-            line = f"{model[:15]:<15}"
-            for p in providers[self.horizontal_scroll:self.horizontal_scroll + self.max_visible_providers]:
-                has_route = any(r.provider == p and r.model == model for r in pref.routes)
-                health = provider_health.get(p)
-                
-                if has_route:
-                    if health and health.healthy:
-                        line += f"  {'●':<10}"  # Configured and healthy
-                    elif health and not health.healthy:
-                        line += f"  {'◐':<10}"  # Configured but degraded
-                    else:
-                        line += f"  {'○':<10}"  # Configured, unknown health
-                else:
-                    line += f"  {'·':<10}"  # Not configured
-            lines.append(line[:w])
-        
-        # Health legend row
-        lines.append("─" * w)
-        legend = "Legend: ●=healthy  ◐=degraded  ○=unknown  ·=not configured"
-        lines.append(legend[:w])
-        
-        return lines
