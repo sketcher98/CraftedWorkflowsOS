@@ -31,6 +31,7 @@ class DiagnosticsScreen:
 
     def handle_key(self, key: int) -> bool:
         """Handle key press. Returns True if handled."""
+        # Tab switching: 1-7 only (arrows are reserved for global page nav)
         if key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7')):
             self.current_tab = int(chr(key)) - 1
             self.scroll_offset = 0
@@ -38,24 +39,6 @@ class DiagnosticsScreen:
                 self._dangling_cache = None  # force rescan on tab entry
             elif self.current_tab == 5:
                 self._metrics_cache = None  # force refresh on tab entry
-            return True
-
-        if key in (curses.KEY_LEFT, ord('h')):
-            self.current_tab = max(0, self.current_tab - 1)
-            self.scroll_offset = 0
-            if self.current_tab == 4:
-                self._dangling_cache = None
-            elif self.current_tab == 5:
-                self._metrics_cache = None
-            return True
-
-        if key in (curses.KEY_RIGHT, ord('l')):
-            self.current_tab = min(6, self.current_tab + 1)
-            self.scroll_offset = 0
-            if self.current_tab == 4:
-                self._dangling_cache = None
-            elif self.current_tab == 5:
-                self._metrics_cache = None
             return True
 
         if key in (curses.KEY_UP, ord('k')):
@@ -83,7 +66,7 @@ class DiagnosticsScreen:
         # Title line: "DIAGNOSTICS" aligned with the tabs below (col 3),
         # hint right-aligned; ruled below. The header rule above serves
         # as the top border.
-        hint = "[1-7=tabs]  [h/Esc=back]"
+        hint = "[←/→] page •  [1-7]=tabs  [Esc]=back"
         term.write(y, 3, "DIAGNOSTICS", curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)

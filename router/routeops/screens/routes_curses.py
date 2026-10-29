@@ -52,18 +52,9 @@ class RoutesScreen:
                 self.horizontal_scroll = min(max_scroll, self.horizontal_scroll + 1)
             return True
 
-        # Top-level view tabs (editor closed): ←/→ and 1-3
+        # Top-level view tabs (editor closed): 1-3 (arrows are reserved for
+        # global page navigation)
         if self.editor.mode == "closed":
-            if key in (curses.KEY_LEFT,):
-                self.view_tab = (self.view_tab - 1) % len(self.view_names)
-                self.horizontal_scroll = 0
-                self.current_pref_index = 0
-                return True
-            if key in (curses.KEY_RIGHT,):
-                self.view_tab = (self.view_tab + 1) % len(self.view_names)
-                self.horizontal_scroll = 0
-                self.current_pref_index = 0
-                return True
             if key in (ord('1'), ord('2'), ord('3')):
                 idx = int(chr(key)) - 1
                 if idx < len(self.view_names):
@@ -673,9 +664,9 @@ class RoutesScreen:
 
         # Title line: ROUTES @3, hint right-aligned, ruled below
         title = f"ROUTES  [{len(prefs)} preferences]"
-        hint = ("[←/→]=view  [1-3]=view  [Tab]=pref  [e]=edit  [a]=add  "
+        hint = ("[←/→] page •  [1-3] view  [Tab]=pref  [e]=edit  [a]=add  "
                 "[d]=del  [n]=rename  [x]=test  [o]=providers  [j/k]=order")
-        short_hint = "[←/→]=view  [1-3]=view  [Tab]=pref  [e]=edit  [a]=add  [d]=del  [Esc]=back"
+        short_hint = "[←/→] page •  [1-3] view  [Tab]=pref  [e]=edit  [a]=add  [d]=del  [Esc]=back"
         room = cols - (3 + len(title)) - 6
         if len(hint) > room:
             hint = short_hint if len(short_hint) <= room else "[Esc]=back"

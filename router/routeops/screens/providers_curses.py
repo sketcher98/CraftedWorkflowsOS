@@ -112,18 +112,9 @@ class ProvidersScreen:
             self.test_lines = None
             return True
 
-        # View tabs (home only): ←/→ and 1-4 select the visible set
+        # View tabs (home only): 1-4 select the visible set (arrows are
+        # reserved for global page navigation)
         if not self.show_detail and self.mode == "closed":
-            if key in (curses.KEY_LEFT,):
-                self.view_tab = (self.view_tab - 1) % len(self.view_names)
-                self.selected_index = 0
-                self.scroll_offset = 0
-                return True
-            if key in (curses.KEY_RIGHT,):
-                self.view_tab = (self.view_tab + 1) % len(self.view_names)
-                self.selected_index = 0
-                self.scroll_offset = 0
-                return True
             if key in (ord('1'), ord('2'), ord('3'), ord('4')):
                 idx = int(chr(key)) - 1
                 if idx < len(self.view_names):
@@ -574,8 +565,8 @@ class ProvidersScreen:
             short_hint = "[t]=probe  [m]=keys  [Esc]=back"
         else:
             title = f"PROVIDERS  [{len(self.app_state.providers)} providers]"
-            hint = "[Enter]=detail  [x]=disable/enable  [d]=del  [Esc]=back"
-            short_hint = "[Enter]=detail  [x]=toggle  [d]=del  [Esc]=back"
+            hint = "[←/→] page •  [1-4] view  [Enter]=detail  [x]=disable/enable  [d]=del  [Esc]=back"
+            short_hint = "[←/→] page •  [1-4] view  [Enter]=detail  [x]=toggle  [d]=del  [Esc]=back"
         # Guard against hint/title collision on narrow terminals: use a
         # compact hint when the full one would overlap the title.
         room = cols - (3 + len(title)) - 6

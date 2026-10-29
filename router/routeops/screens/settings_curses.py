@@ -83,23 +83,9 @@ class SettingsScreen:
                 return True
             return True
 
-        # Tab switching
+        # Tab switching: 1-3 only (arrows are reserved for global page nav)
         if key in (ord("1"), ord("2"), ord("3")):
             self.current_tab = int(chr(key)) - 1
-            self.scroll_offset = 0
-            self.cursor = 0
-            self.editing = False
-            return True
-
-        if key in (curses.KEY_LEFT,):
-            self.current_tab = max(0, self.current_tab - 1)
-            self.scroll_offset = 0
-            self.cursor = 0
-            self.editing = False
-            return True
-
-        if key in (curses.KEY_RIGHT,):
-            self.current_tab = min(2, self.current_tab + 1)
             self.scroll_offset = 0
             self.cursor = 0
             self.editing = False
@@ -350,7 +336,7 @@ class SettingsScreen:
         # Title line: "SETTINGS" aligned with the tabs below (col 3),
         # hint right-aligned; ruled below. The header rule above serves
         # as the top border.
-        hint = "[+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
+        hint = "[←/→] page •  [+/- adjust] [Enter review] [1-3 tabs] [Esc back]"
         term.write(y, 3, "SETTINGS", curses.A_BOLD | curses.color_pair(1))
         term.write(y, cols - len(hint) - 1, hint[:cols - 2],
                    curses.color_pair(5) | curses.A_DIM)
