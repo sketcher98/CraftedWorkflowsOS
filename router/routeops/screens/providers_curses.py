@@ -24,6 +24,9 @@ class ProvidersScreen:
         self.selected_index = 0
         self.show_detail = False
         self.detail_scroll = 0
+        # Home view tabs (Settings/Diagnostics style selectable row)
+        self.view_tab = 0  # 0 all | 1 routed | 2 no_route | 3 disabled
+        self.view_names = ["all", "routed", "no-route", "disabled"]
         # provider-management inline overlays
         self.mode = "closed"      # closed | add_prov | confirm_del | prov_diff | confirm_dis
         self.input_buf = ""
@@ -108,6 +111,26 @@ class ProvidersScreen:
             self.test_result = None
             self.test_lines = None
             return True
+
+        # View tabs (home only): ←/→ and 1-4 select the visible set
+        if not self.show_detail and self.mode == "closed":
+            if key in (curses.KEY_LEFT,):
+                self.view_tab = (self.view_tab - 1) % len(self.view_names)
+                self.selected_index = 0
+                self.scroll_offset = 0
+                return True
+            if key in (curses.KEY_RIGHT,):
+                self.view_tab = (self.view_tab + 1) % len(self.view_names)
+                self.selected_index = 0
+                self.scroll_offset = 0
+                return True
+            if key in (ord('1'), ord('2'), ord('3'), ord('4')):
+                idx = int(chr(key)) - 1
+                if idx < len(self.view_names):
+                    self.view_tab = idx
+                    self.selected_index = 0
+                    self.scroll_offset = 0
+                return True
 
         if key in (10, curses.KEY_ENTER):  # Enter
             row = self._selected_provider_row()
@@ -296,8 +319,22 @@ class ProvidersScreen:
         self._rows_at = now
         return rows
 
-    def _selected_provider_row(self) -> dict:
+    def _visible_rows(self) -> List[dict]:
+        """Provider rows for the CURRENT view tab (home)."""
         rows = self._provider_rows()
+        tab = getattr(self, "view_tab", 0)
+        if tab <= 0:
+            return rows
+        if tab == 1:  # routed
+            return [r for r in rows if not r["disabled"]
+                    and provider_routes(self.app_state, r["name"]) > 0]
+        if tab == 2:  # no-route (active but unrouted)
+            return [r for r in rows if not r["disabled"]
+                    and provider_routes(self.app_state, r["name"]) == 0]
+        return [r for r in rows if r["disabled"]]  # disabled
+
+    def _selected_provider_row(self) -> dict:
+        rows = self._visible_rows()
         if not (0 <= self.selected_index < len(rows)):
             return {"name": "", "disabled": False}
         return rows[self.selected_index]
@@ -552,6 +589,21 @@ class ProvidersScreen:
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
         y += 1
 
+        # View tab row (home only) — Settings/Diagnostics style, selectable
+        if not self.show_detail:
+            tx = 3
+            for vi, vn in enumerate(self.view_names):
+                marker = f"[{vn.upper()}]" if vi == self.view_tab else f" {vn} "
+                attr = (curses.color_pair(2) | curses.A_BOLD if vi == self.view_tab
+                        else curses.A_DIM)
+                if tx + len(marker) > cols - 2:
+                    break
+                term.write(y, tx, marker, attr)
+                tx += len(marker) + 1
+            y += 1
+            term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
+            y += 1
+
         # Inline test result banner (multi-line per-key results)
         if self.test_result and not self.show_detail:
             ok = "OK" in self.test_result
@@ -586,8 +638,8 @@ class ProvidersScreen:
             self._render_detail_box(term, y, cols, f"DETAIL: {provider_name}",
                                     detail_lines, seg_lines)
         else:
-            # Provider list — active first, disabled dimmed + marked.
-            rows_all = self._provider_rows()
+            # Provider list — ACTIVE view tab, disabled dimmed + marked.
+            rows_all = self._visible_rows()
             visible_rows = rows - y - 3
 
             shown = 0
@@ -660,7 +712,8 @@ class ProvidersScreen:
                     summary += f"  (showing {shown} of {n_total})"
             body.append("")
             body.append([(summary, curses.color_pair(5) | curses.A_DIM)])
-            y = render_box(term.write, y, cols, "PROVIDERS", body, rows)
+            box_title = f"PROVIDERS — {self.view_names[self.view_tab].upper()}"
+            y = render_box(term.write, y, cols, box_title, body, rows)
 
             # Scroll indicator
             if len(rows_all) > visible_rows:
