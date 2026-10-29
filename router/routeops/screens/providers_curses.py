@@ -24,6 +24,10 @@ class ProvidersScreen:
         self.selected_index = 0
         self.show_detail = False
         self.detail_scroll = 0
+        # provider-management inline overlays
+        self.mode = "closed"      # closed | add_prov | confirm_del
+        self.input_buf = ""
+        self.overlay_msg = ""
 
     def set_size(self, width: int, height: int) -> None:
         self.width = max(40, width)
@@ -46,6 +50,32 @@ class ProvidersScreen:
         """Handle key press. Returns True if handled."""
         providers = self._sorted_providers()
         max_index = len(providers) - 1
+
+        # ---- inline overlays: add provider / confirm delete ----
+        if self.mode == "add_prov":
+            if key in (10, 13, curses.KEY_ENTER):
+                if self.input_buf.strip():
+                    self._add_provider(self.input_buf.strip())
+                return True
+            if key in (8, 127, curses.KEY_BACKSPACE):
+                self.input_buf = self.input_buf[:-1]
+                return True
+            if 32 <= key <= 126:
+                self.input_buf += chr(key)
+                return True
+            if key == 27:
+                self.mode = "closed"
+                self.input_buf = ""
+                return True
+            return True
+        if self.mode == "confirm_del":
+            if key in (ord('y'), ord('Y')):
+                self._remove_selected_provider()
+                return True
+            if key in (27, ord('n'), ord('N')):
+                self.mode = "closed"
+                return True
+            return True
 
         if key in (curses.KEY_UP, ord('k')):
             if self.show_detail:
@@ -75,9 +105,22 @@ class ProvidersScreen:
                 self.detail_scroll = 0
             return True
 
-        if key == ord('t'):  # probe keys — only inside provider detail
-            if self.show_detail and providers:
+        if key == ord('t'):  # probe selected provider (home AND detail)
+            if providers:
                 self._test_selected(providers)
+            return True
+
+        if key == ord('a'):  # add provider (home)
+            if not self.show_detail:
+                self.mode = "add_prov"
+                self.input_buf = ""
+                self.overlay_msg = ""
+            return True
+
+        if key == ord('d'):  # delete provider (home)
+            if not self.show_detail and providers:
+                self.mode = "confirm_del"
+                self.overlay_msg = providers[self.selected_index]
             return True
 
         if key in (27, ord('h'), ord('q')):  # Esc, h, q
@@ -97,6 +140,70 @@ class ProvidersScreen:
             return True
 
         return False
+
+    def _add_provider(self, line: str):
+        """Add provider from 'name base_url key_env'. Validates env var,
+        probes the catalog, commits via ConfigEditor (backup->validate->
+        atomic). Mirrors the Routes editor's provider-add safety."""
+        from pathlib import Path
+        from routeops.adapters.config_editor import ConfigEditor
+        parts = line.split()
+        if len(parts) != 3:
+            self.overlay_msg = "need exactly: name base_url key_env"
+            return
+        name, base_url, key_env = parts
+        if not base_url.startswith("http"):
+            self.overlay_msg = "base_url must start with http(s)://"
+            return
+        env_path = Path.home() / ".hermes" / ".env"
+        if not env_path.exists() or key_env not in env_path.read_text(errors="replace"):
+            self.overlay_msg = f"key_env '{key_env}' not found in ~/.hermes/.env"
+            return
+        try:
+            ce = ConfigEditor()
+            cfg = ce.load()
+            names = {p["name"] for p in cfg.get("providers", [])}
+            if name in names:
+                self.overlay_msg = f"provider '{name}' already exists"
+                return
+            probe = ce.probe_catalog(base_url, key_env, timeout=15)
+            cfg["providers"].append({"name": name, "base_url": base_url,
+                                     "key_env": key_env, "key_envs": [key_env]})
+            ce.commit(cfg, f"add provider '{name}'")
+            self.mode = "closed"
+            self.input_buf = ""
+            self.overlay_msg = (f"added '{name}' — probe: {len(probe['models'])} models"
+                                if probe.get("ok") else
+                                f"added '{name}' — probe FAILED ({probe.get('error','')[:40]})")
+        except Exception as e:
+            self.overlay_msg = f"add failed: {e}"
+
+    def _remove_selected_provider(self):
+        """Remove the selected provider — refused while any preference routes
+        to it. Commits via ConfigEditor."""
+        from routeops.adapters.config_editor import ConfigEditor
+        try:
+            ce = ConfigEditor()
+            cfg = ce.load()
+            name = self._sorted_providers()[self.selected_index]
+            for pref in cfg.get("preferences", []):
+                if any(r.get("provider") == name for r in pref.get("routes", [])):
+                    self.overlay_msg = (f"cannot remove '{name}': still routed by "
+                                        f"preference '{pref.get('name')}' — remove that route first")
+                    self.mode = "closed"
+                    return
+            before = len(cfg.get("providers", []))
+            cfg["providers"] = [p for p in cfg.get("providers", [])
+                                if p.get("name") != name]
+            if len(cfg["providers"]) == before:
+                self.overlay_msg = f"provider '{name}' not found"
+            else:
+                ce.commit(cfg, f"remove provider '{name}'")
+                self.overlay_msg = f"removed '{name}'"
+            self.mode = "closed"
+        except Exception as e:
+            self.overlay_msg = f"remove failed: {e}"
+            self.mode = "closed"
 
     def _test_selected(self, providers: List[str]) -> None:
         """Live-test ALL key pools of the selected provider, each individually.
@@ -141,9 +248,26 @@ class ProvidersScreen:
         rows, cols = term.size.rows, term.size.cols
         y = 0
 
+        # Inline overlays: add provider / confirm delete
+        if self.mode == "add_prov":
+            term.write(y, 0, "┌ ADD PROVIDER ────────────────────────────────────────────────┐"[:cols], curses.color_pair(1))
+            y += 1
+            term.write(y, 2, "format: name base_url key_env    (Enter=add, Esc=cancel)", curses.color_pair(5))
+            y += 1
+            term.write(y, 2, f"> {self.input_buf}_", curses.color_pair(2) | curses.A_BOLD)
+            y += 1
+            if self.overlay_msg:
+                term.write(y, 2, self.overlay_msg[:cols-6], curses.color_pair(3))
+            return
+        if self.mode == "confirm_del":
+            term.write(y, 0, "┌ DELETE PROVIDER ───────────────────────────────────────────────┐"[:cols], curses.color_pair(4))
+            y += 1
+            term.write(y, 2, f"Remove provider '{self.overlay_msg}'?  [y]=yes  [n/Esc]=no", curses.color_pair(4) | curses.A_BOLD)
+            return
+
         # Title bar — home is a pure list; ALL actions live inside each
         # provider's detail view (t/m/i).
-        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [Esc] Back"
+        title = f"● PROVIDERS  [{len(self.app_state.providers)} providers]  [Enter=detail]  [t]=probe  [a]=add  [d]=delete  [Esc] Back"
         term.write(y, 0, title[:cols], curses.A_BOLD | curses.color_pair(1))
         y += 1
         term.write(y, 0, "─" * (cols - 2), curses.color_pair(1))
