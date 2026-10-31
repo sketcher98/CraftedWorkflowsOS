@@ -169,6 +169,29 @@ class SettingsScreen:
         "hard_failed_wait_seconds": "Short waits re-probe too often; long waits leave routes down longer.",
     }
 
+    @staticmethod
+    def _account_layout_note(cfg) -> str:
+        """Derive the honest account-layout disclaimer across providers.
+
+        Same account => spreading keys is resilience, not capacity.
+        Distinct accounts => rotation can expand capacity.
+        Undeclared => treated as same-account (safe default), never guessed.
+        """
+        layouts = set()
+        for p in cfg.get("providers") or []:
+            envs = list(p.get("key_envs") or ([p["key_env"]] if p.get("key_env") else []))
+            accts = list(p.get("key_accounts") or [])
+            if not accts or len(accts) != len(envs):
+                continue
+            layouts.add("same" if len(set(accts)) == 1 else "distinct")
+        if not layouts:
+            return "Account layout not declared — treating keys as same-account (safe default)."
+        if layouts == {"same"}:
+            return "Keys share one account — spreading them is resilience, not capacity."
+        if layouts == {"distinct"}:
+            return "Keys span accounts — rotation can expand capacity."
+        return "Mixed account layouts declared — check per-provider detail."
+
     def _knob_risk(self, key: str) -> str:
         return self.KNOB_RISKS.get(key, "")
 
@@ -676,6 +699,8 @@ class SettingsScreen:
             bits = []
             if risk:
                 bits.append(risk)
+            if item.get("key") == "key_strategy":
+                bits.append(self._account_layout_note(cfg))
             if "opt" in item and item["opt"] is not None:
                 bits.append(f"Recommended: {item['opt']}")
             if bits:

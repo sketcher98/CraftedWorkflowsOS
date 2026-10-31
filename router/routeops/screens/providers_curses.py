@@ -698,6 +698,15 @@ class ProvidersScreen:
                     summary += f"  Disabled: {n_dis}"
                 if n_noroute:
                     summary += f"  No-route: {n_noroute}"
+                # Account-layout disclaimer across configured providers.
+                from routeops.adapters.config_editor import ConfigEditor
+                try:
+                    cfg = ConfigEditor().load()
+                    note = SettingsScreen._account_layout_note(cfg)
+                except Exception:
+                    note = ""
+                if note:
+                    summary += "\n" + note
                 if shown < n_total:
                     summary += f"  (showing {shown} of {n_total})"
             body.append("")

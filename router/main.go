@@ -28,6 +28,11 @@ type Provider struct {
 	BaseURL string   `json:"base_url"`
 	KeyEnv  string   `json:"key_env"`
 	KeyEnvs []string `json:"key_envs"`
+	// KeyAccounts optionally declares the account each key_env belongs to,
+	// aligned with KeyEnvs. Same account => balancing gives resilience, not
+	// capacity; distinct accounts => rotation can expand capacity. Empty
+	// (or mismatched length) means "unknown" and is treated as same-account.
+	KeyAccounts []string `json:"key_accounts"`
 
 	mu        sync.Mutex
 	routes    map[string]*RouteHealth
@@ -2594,6 +2599,11 @@ func validateConfig() error {
 		envs := providerKeyEnvs(p)
 		if len(envs) == 0 {
 			return fmt.Errorf("provider[%s]: no key_env/key_envs configured", p.Name)
+		}
+		// key_accounts, when declared, must align 1:1 with key_envs.
+		if len(p.KeyAccounts) > 0 && len(p.KeyAccounts) != len(envs) {
+			return fmt.Errorf("provider[%s]: key_accounts has %d entries but key_envs has %d",
+				p.Name, len(p.KeyAccounts), len(envs))
 		}
 	}
 
