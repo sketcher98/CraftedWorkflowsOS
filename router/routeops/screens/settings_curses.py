@@ -231,7 +231,14 @@ class SettingsScreen:
             # S1/S8: stage only, never write on a keystroke.
             self._stage_router_int(item["key"], delta)
         elif item["type"] == "bool":
-            pass  # Enter toggles
+            # +/- also toggles bools on the Router tab (Enter does too)
+            if self.current_tab == 1:
+                self._stage_router_bool(item["key"], not bool(item.get("value")))
+            else:
+                key = item["key"]
+                s = self.app_state.settings
+                setattr(s, key, not getattr(s, key, False))
+                self._flash(f"{item['label']}: {'ON' if getattr(s, key) else 'OFF'}")
         elif item["type"] == "cycle":
             pass  # Enter cycles
 
@@ -355,7 +362,10 @@ class SettingsScreen:
                 setattr(s, key, next_val)
                 self._flash(f"{item['label']}: {next_val}")
         elif item["type"] == "int":
-            self._open_diff_preview()
+            if self.pending_cfg is None:
+                self._flash("nothing staged yet — use +/- to change this knob")
+            else:
+                self._open_diff_preview()
         elif item["type"] == "text":
             # Enter on a text row starts inline editing; Enter again stages.
             self.editing = True
@@ -539,6 +549,10 @@ class SettingsScreen:
             cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
         except Exception as e:
             return [f"Cannot read config.json: {e}"]
+        # If something is staged, reflect the STAGED values so toggles and
+        # steps appear immediately (commit writes them for real).
+        if self.pending_cfg is not None:
+            cfg = self.pending_cfg
 
         r = cfg.get("retry", {})
         ro = cfg.get("routeops", {})
