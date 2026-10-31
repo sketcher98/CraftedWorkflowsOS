@@ -786,7 +786,7 @@ func refreshProviderCatalog(p *Provider) {
 			Outcome:  "ok",
 			Status:   200,
 			Model:    fmt.Sprintf("%d", lastModels),
-			Error:    fmt.Sprintf("skipped_keys=%d", skippedKeys),
+			Meta:     fmt.Sprintf("skipped_keys=%d", skippedKeys),
 		})
 		return
 	}
@@ -2462,11 +2462,14 @@ type RouteEvent struct {
 	// RetryAfterSeconds: Retry-After header value captured from a 429.
 	RetryAfterSeconds int `json:"retry_after_seconds,omitempty"`
 	// KeyEnv already exists; KeyID distinguishes which key served.
-	KeyID           string `json:"key_id,omitempty"`
-	Outcome         string `json:"outcome,omitempty"`
-	Status          int    `json:"status,omitempty"`
-	LatencyMS       int64  `json:"latency_ms,omitempty"`
-	Error           string `json:"error,omitempty"`
+	KeyID     string `json:"key_id,omitempty"`
+	Outcome   string `json:"outcome,omitempty"`
+	Status    int    `json:"status,omitempty"`
+	LatencyMS int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+	// Meta carries informational, non-error metadata (e.g. skipped key
+	// counts) — never rendered as an error by the TUI.
+	Meta            string `json:"meta,omitempty"`
 	KeyEnv          string `json:"key_env,omitempty"`
 	CooldownSeconds int    `json:"cooldown_seconds,omitempty"`
 	CooldownUntil   string `json:"cooldown_until,omitempty"`
