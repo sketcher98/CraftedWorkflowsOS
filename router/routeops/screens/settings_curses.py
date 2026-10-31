@@ -281,10 +281,18 @@ class SettingsScreen:
         # the source of truth; keep config in sync for display
         self._flash(f"{name}: {old:.1f}s -> {new:.1f}s (live)")
 
+    def _effective_cfg(self) -> dict:
+        """Current working config: staged pending if present, else disk."""
+        if self.pending_cfg is not None:
+            return self.pending_cfg
+        return json.loads(ROUTER_CONFIG_JSON.read_text())
+
     def _stage_router_int(self, key: str, delta: int) -> None:
-        """Stage a router config change (commit only through the diff gate)."""
+        """Stage a router config change (commit only through the diff gate).
+        Mutates the PENDING config when present, so repeated +/- adjust the
+        staged value instead of always applying to the disk baseline."""
         try:
-            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+            cfg = self._effective_cfg()
         except Exception:
             self._flash("Cannot read config")
             return
@@ -311,7 +319,7 @@ class SettingsScreen:
     def _stage_router_bool(self, key: str, value: bool) -> None:
         """Stage a router bool knob (cache/budget enabled) via the diff gate."""
         try:
-            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+            cfg = self._effective_cfg()
         except Exception:
             self._flash("Cannot read config")
             return
@@ -325,7 +333,7 @@ class SettingsScreen:
     def _stage_router_strategy(self, mode: str) -> None:
         """Stage a routing-strategy change (config top-level "strategy")."""
         try:
-            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+            cfg = self._effective_cfg()
         except Exception:
             self._flash("Cannot read config")
             return
@@ -337,7 +345,7 @@ class SettingsScreen:
     def _stage_router_text(self, key: str, value: str) -> None:
         """Stage a routeops text knob (test_prompt) via the diff gate."""
         try:
-            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+            cfg = self._effective_cfg()
         except Exception:
             self._flash("Cannot read config")
             return
