@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -61,10 +61,10 @@ type Preference struct {
 }
 
 type RetryConfig struct {
-	FailureLimit          int `json:"failure_limit"`
-	CooldownSeconds       int `json:"cooldown_seconds"`
-	MaxCooldownSeconds    int `json:"max_cooldown_seconds"`
-	AllFailedWait         int `json:"all_failed_wait_seconds"`
+	FailureLimit             int `json:"failure_limit"`
+	CooldownSeconds          int `json:"cooldown_seconds"`
+	MaxCooldownSeconds       int `json:"max_cooldown_seconds"`
+	AllFailedWait            int `json:"all_failed_wait_seconds"`
 	HardFailedWaitSeconds    int `json:"hard_failed_wait_seconds"`
 	RouteTimeoutSeconds      int `json:"route_timeout_seconds"`
 	StreamIdleTimeoutSeconds int `json:"stream_idle_timeout_seconds"`
@@ -77,9 +77,9 @@ type RetryConfig struct {
 }
 
 type Config struct {
-	Host                  string       `json:"host"`
-	Port                  int          `json:"port"`
-	CatalogRefreshSeconds int          `json:"catalog_refresh_seconds"`
+	Host                  string `json:"host"`
+	Port                  int    `json:"port"`
+	CatalogRefreshSeconds int    `json:"catalog_refresh_seconds"`
 	// Strategy selects the routing strategy: "" / "configured" (default,
 	// configured order), "lkgp" (opt-in), "priority", or "p2c".
 	// Validated against the strategy trait table (strategy/traits.go).
@@ -91,18 +91,24 @@ type Config struct {
 	Cache CacheConfig `json:"cache"`
 	// Budget: per-provider sliding-window admission limits.
 	Budget BudgetConfig `json:"budget"`
+	// Size: request body limits.
+	Size SizeConfig `json:"size"`
 }
 
 type CacheConfig struct {
-	Enabled bool  `json:"enabled"`
-	MaxSize int   `json:"max_size"`
-	TTLSeconds int `json:"ttl_seconds"`
+	Enabled    bool `json:"enabled"`
+	MaxSize    int  `json:"max_size"`
+	TTLSeconds int  `json:"ttl_seconds"`
+}
+
+type SizeConfig struct {
+	MaxRequestMB int `json:"max_request_mb"` // 0 = unlimited (default 10)
 }
 
 type BudgetConfig struct {
-	Enabled      bool `json:"enabled"`
-	RequestsPerMinute int `json:"requests_per_minute"` // per provider, 0 = unlimited
-	WindowSeconds     int `json:"window_seconds"`       // sliding window (default 60)
+	Enabled           bool `json:"enabled"`
+	RequestsPerMinute int  `json:"requests_per_minute"` // per provider, 0 = unlimited
+	WindowSeconds     int  `json:"window_seconds"`      // sliding window (default 60)
 }
 
 var (
@@ -240,12 +246,12 @@ func providerFailed(p *Provider, model string) {
 	)
 
 	logRouteEvent(RouteEvent{
-		Event:            "route_cooldown",
-		Provider:         p.Name,
-		Model:            model,
-		Outcome:          "cooldown",
-		CooldownSeconds:  cooldown,
-		CooldownUntil:    h.CooldownTil.Format(time.RFC3339),
+		Event:           "route_cooldown",
+		Provider:        p.Name,
+		Model:           model,
+		Outcome:         "cooldown",
+		CooldownSeconds: cooldown,
+		CooldownUntil:   h.CooldownTil.Format(time.RFC3339),
 	})
 
 	// GAP-007: health transition (healthy -> cooldown).
@@ -353,13 +359,13 @@ func providerKeyFailed(p *Provider, env string) {
 	// GAP-005: a key hitting its failure limit should be rotatable — emit
 	// the signal as visible telemetry so operators can act on it.
 	logRouteEvent(RouteEvent{
-		Event:            "credential_rotation_signal",
-		Provider:         p.Name,
-		KeyEnv:           env,
-		Outcome:          "key_failed",
-		CooldownSeconds:  cooldown,
-		CooldownUntil:    h.CooldownTil.Format(time.RFC3339),
-		FallbackDepth:    h.Failures,
+		Event:           "credential_rotation_signal",
+		Provider:        p.Name,
+		KeyEnv:          env,
+		Outcome:         "key_failed",
+		CooldownSeconds: cooldown,
+		CooldownUntil:   h.CooldownTil.Format(time.RFC3339),
+		FallbackDepth:   h.Failures,
 	})
 }
 
@@ -849,12 +855,12 @@ func earliestCooldown() time.Duration {
 }
 
 type Status struct {
-	Name       string        `json:"name"`
-	Healthy    bool          `json:"healthy"`
-	Failures   int           `json:"failures"`
-	Cooldown   string        `json:"cooldown,omitempty"`
-	HardFailed bool          `json:"hard_failed"`
-	Catalog    int           `json:"catalog_models"`
+	Name       string `json:"name"`
+	Healthy    bool   `json:"healthy"`
+	Failures   int    `json:"failures"`
+	Cooldown   string `json:"cooldown,omitempty"`
+	HardFailed bool   `json:"hard_failed"`
+	Catalog    int    `json:"catalog_models"`
 	// B-7: per-cell state. /health previously reported only a provider-level
 	// boolean that hid dead cells (AUDIT-003) — 5 of 7 cells could be dead
 	// and the provider still showed green.
@@ -863,12 +869,12 @@ type Status struct {
 
 // CellStatus is the per-provider×model health for one route.
 type CellStatus struct {
-	Model        string `json:"model"`
-	Healthy      bool   `json:"healthy"`
-	Failures     int    `json:"failures"`
-	HardFailed   bool   `json:"hard_failed"`
+	Model         string `json:"model"`
+	Healthy       bool   `json:"healthy"`
+	Failures      int    `json:"failures"`
+	HardFailed    bool   `json:"hard_failed"`
 	CooldownUntil string `json:"cooldown_until,omitempty"`
-	Warm         bool   `json:"warm,omitempty"`
+	Warm          bool   `json:"warm,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -955,8 +961,8 @@ func waitForRecovery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":             "router_exhausted",
-		"retry_after_secs":  strconv.Itoa(retryAfterSec),
+		"error":            "router_exhausted",
+		"retry_after_secs": strconv.Itoa(retryAfterSec),
 	})
 
 	// Recovery continues in hardFailureRecoveryLoop() background - no sleep here
@@ -1038,8 +1044,12 @@ func buildRequest(
 	}
 
 	for key, values := range r.Header {
+		if isForbiddenUpstreamHeaderName(key) {
+			continue
+		}
 		for _, value := range values {
-			if strings.EqualFold(key, "Host") {
+			value = sanitizeHeaderValue(value)
+			if value == "" {
 				continue
 			}
 			req.Header.Add(key, value)
@@ -1163,6 +1173,7 @@ func streamResponse(
 	onCommit func(),
 	firstChunkMS *int64,
 	started time.Time,
+	finalAttempt bool,
 ) error {
 	log.Printf("streamResponse: ENTERED for request %s", w.Header().Get("X-Request-ID"))
 	defer resp.Body.Close()
@@ -1260,8 +1271,15 @@ func streamResponse(
 		}
 		return 45 * time.Second
 	}()
-	firstEventTimer := time.NewTimer(firstEventTimeout)
-	defer firstEventTimer.Stop()
+	// Bifrost rule: the FINAL attempt never gets a first-token cutoff — it
+	// runs to an answer (or the idle/client deadline). Earlier attempts use
+	// the first-event timer so a stalled provider hands off fast.
+	var firstEventC <-chan time.Time
+	if !finalAttempt {
+		firstEventTimer := time.NewTimer(firstEventTimeout)
+		defer firstEventTimer.Stop()
+		firstEventC = firstEventTimer.C
+	}
 
 	log.Printf(
 		"streamResponse: fail-fast timers armed for request %s, first_event=%s idle=%s",
@@ -1356,7 +1374,7 @@ func streamResponse(
 			}
 			return fmt.Errorf("stream idle timeout: no data for %s", idleTimeout)
 
-		case <-firstEventTimer.C:
+		case <-firstEventC:
 			if !committed {
 				log.Printf(
 					"FIRST-EVENT TIMEOUT FIRED (pre-commit) for request %s after %s — aborting upstream, will fail over",
@@ -1380,9 +1398,10 @@ func streamResponse(
 				default:
 				}
 			}
-			if !firstEventTimer.Stop() {
+			if firstEventC != nil {
+				// Drain any pending first-event signal so it cannot fire later.
 				select {
-				case <-firstEventTimer.C:
+				case <-firstEventC:
 				default:
 				}
 			}
@@ -1509,6 +1528,7 @@ func tryRoute(
 	preferenceFallback bool,
 	preferenceFrom string,
 	preferenceTo string,
+	finalAttempt bool,
 ) (success bool, retryable bool, err error) {
 	started := time.Now()
 	statusCode := 0
@@ -1552,15 +1572,15 @@ func tryRoute(
 	defer func() {
 		outcome := routeOutcome
 		e := RouteEvent{
-			Event:            "route_result",
-			RequestID:        requestID,
-			Provider:         p.Name,
-			Model:            route.Model,
-			Preference:       preferenceName,
-			Outcome:          outcome,
-			LatencyMS:        time.Since(started).Milliseconds(),
-			Status:           statusCode,
-			KeyEnv:           keyEnv,
+			Event:      "route_result",
+			RequestID:  requestID,
+			Provider:   p.Name,
+			Model:      route.Model,
+			Preference: preferenceName,
+			Outcome:    outcome,
+			LatencyMS:  time.Since(started).Milliseconds(),
+			Status:     statusCode,
+			KeyEnv:     keyEnv,
 			// GAP-001: time-to-first-byte (ms).
 			FirstChunkLatencyMS: firstChunkMS,
 			// GAP-002: fallback depth at the time this route served.
@@ -1803,25 +1823,26 @@ func tryRoute(
 		// are now observable end-to-end (pending via route_attempt, this
 		// event when bytes start flowing downstream).
 		logRouteEvent(RouteEvent{
-			Event:           "route_committed",
-			RequestID:       requestID,
-			Provider:        p.Name,
-			Model:           route.Model,
-			Preference:      preferenceName,
-			Outcome:         "committed",
-			Status:          resp.StatusCode,
-			LatencyMS:       time.Since(started).Milliseconds(),
-			KeyEnv:          keyEnv,
+			Event:               "route_committed",
+			RequestID:           requestID,
+			Provider:            p.Name,
+			Model:               route.Model,
+			Preference:          preferenceName,
+			Outcome:             "committed",
+			Status:              resp.StatusCode,
+			LatencyMS:           time.Since(started).Milliseconds(),
+			KeyEnv:              keyEnv,
 			FirstChunkLatencyMS: firstChunkMS,
-			FallbackDepth:   fallbackCount,
+			FallbackDepth:       fallbackCount,
 		})
-	}, &firstChunkMS, started)
+	}, &firstChunkMS, started, finalAttempt)
 
 	if err != nil {
 		if errors.Is(err, errFirstEventTimeout) {
 			// Pre-commit abort: nothing was sent downstream — fully retryable.
 			routeOutcome = "transient"
 			statusCode = http.StatusGatewayTimeout
+			errorKind = "ttft_timeout"
 			providerFailed(p, route.Model)
 			log.Printf(
 				"provider=%s model=%s first-event timeout BEFORE commitment — cooldown + failover",
@@ -1913,6 +1934,15 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Size limit (item 4): enforce before any routing work.
+	cfgMu.RLock()
+	maxReqMB := cfg.Size.MaxRequestMB
+	cfgMu.RUnlock()
+	if maxReqMB > 0 && len(body) > maxReqMB*1024*1024 {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	// Generate request ID for telemetry correlation
 	requestID := fmt.Sprintf("req-%d-%d", time.Now().UnixNano(), os.Getpid()%10000)
 
@@ -1985,7 +2015,7 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		for _, route := range orderedRoutes {
+		for ri, route := range orderedRoutes {
 			p := providerByName(route.Provider)
 			if p == nil {
 				log.Printf(
@@ -2052,86 +2082,89 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 
 			attempted = true
 
-					for {
-						success, retryable, err := tryRoute(
-							w,
-							r,
-							body,
-							route,
-							p,
-							requestID,
-							preference.Name,
-							fallbackCount,
-							fallbackFrom,
-							skippedHardFailed,
-							preferenceFallback,
-							preferenceFrom,
-							preferenceTo,
-						)
+			finalAttempt := ri == len(orderedRoutes)-1
 
-						if r.Context().Err() != nil {
-							return
-						}
+			for {
+				success, retryable, err := tryRoute(
+					w,
+					r,
+					body,
+					route,
+					p,
+					requestID,
+					preference.Name,
+					fallbackCount,
+					fallbackFrom,
+					skippedHardFailed,
+					preferenceFallback,
+					preferenceFrom,
+					preferenceTo,
+					finalAttempt,
+				)
 
-						if success {
-										// LKGP: record which provider succeeded for this
-										// preference so the next request tries it first.
-										if strategyRegistry != nil {
-											if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
-												if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
-													lkgpStrat.SetPin(originalPreference, p.Name)
-												}
-											}
-										}
-										return
-						}
+				if r.Context().Err() != nil {
+					return
+				}
 
-						// A 401 means the current provider key failed.
-						// Retry this same route so selectProviderKey() can choose
-						// the next healthy key before provider fallback occurs.
-						if retryable && err != nil && strings.Contains(err.Error(), "key_env=") {
-							log.Printf(
-								"key fallback provider=%s model=%s error=%v",
-								p.Name,
-								route.Model,
-								err,
-							)
-							continue
-						}
-
-						if !retryable {
-							log.Printf(
-								"route permanently unavailable provider=%s model=%s error=%v",
-								p.Name,
-								route.Model,
-								err,
-							)
-						} else {
-							log.Printf(
-								"route failed provider=%s model=%s error=%v",
-								p.Name,
-								route.Model,
-								err,
-							)
-						}
-
-						fallbackCount++
-						fallbackFrom = p.Name
-						// S9: scoped pin clear — only drop the LKGP pin when the
-						// FAILED target IS the pinned provider; a sibling failure
-						// must not discard a healthy pin (OmniRoute staleLkgpClear).
-						if strategyRegistry != nil && cfg.Strategy == "lkgp" {
-							if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
-								if l, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
-									if l.GetPin(originalPreference) == p.Name {
-										l.DeletePin(originalPreference)
-										log.Printf("lkgp pin cleared preference=%s provider=%s (failed)", originalPreference, p.Name)
-									}
-								}
+				if success {
+					// LKGP: record which provider succeeded for this
+					// preference so the next request tries it first.
+					if strategyRegistry != nil {
+						if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
+							if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
+								lkgpStrat.SetPin(originalPreference, p.Name)
 							}
 						}
-						break
 					}
+					return
+				}
+
+				// A 401 means the current provider key failed.
+				// Retry this same route so selectProviderKey() can choose
+				// the next healthy key before provider fallback occurs.
+				if retryable && err != nil && strings.Contains(err.Error(), "key_env=") {
+					log.Printf(
+						"key fallback provider=%s model=%s error=%v",
+						p.Name,
+						route.Model,
+						err,
+					)
+					continue
+				}
+
+				if !retryable {
+					log.Printf(
+						"route permanently unavailable provider=%s model=%s error=%v",
+						p.Name,
+						route.Model,
+						err,
+					)
+				} else {
+					log.Printf(
+						"route failed provider=%s model=%s error=%v",
+						p.Name,
+						route.Model,
+						err,
+					)
+				}
+
+				fallbackCount++
+				fallbackFrom = p.Name
+				// S9: scoped pin clear — only drop the LKGP pin when the
+				// FAILED target IS the pinned provider; a sibling failure
+				// must not discard a healthy pin (OmniRoute staleLkgpClear).
+				if strategyRegistry != nil && cfg.Strategy == "lkgp" {
+					if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
+						if l, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
+							if l.GetPin(originalPreference) == p.Name {
+								l.DeletePin(originalPreference)
+								log.Printf("lkgp pin cleared preference=%s provider=%s (failed)", originalPreference, p.Name)
+							}
+						}
+					}
+				}
+				break
+			}
 		}
 
 		if attempted {
@@ -2143,26 +2176,26 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 				current := preference.Name
 				preference = next
 				log.Printf(
-								"preference fallback %s -> %s request_id=%s",
-								current,
-								next.Name,
-								requestID,
-							)
-							// Emit preference fallback telemetry
-							logRouteEvent(RouteEvent{
-								Event:           "preference_fallback",
-								RequestID:       requestID,
-								Provider:        "",
-								Model:           "",
-								Preference:      "",
-								Outcome:         "fallback",
-								FromPreference:  current,
-								ToPreference:    next.Name,
-								Context:         "request",
-							})
-							// Record metrics
-							preferenceFallbacks.WithLabelValues(current, next.Name).Inc()
-							// Pass preference fallback info to next tryRoute call
+					"preference fallback %s -> %s request_id=%s",
+					current,
+					next.Name,
+					requestID,
+				)
+				// Emit preference fallback telemetry
+				logRouteEvent(RouteEvent{
+					Event:          "preference_fallback",
+					RequestID:      requestID,
+					Provider:       "",
+					Model:          "",
+					Preference:     "",
+					Outcome:        "fallback",
+					FromPreference: current,
+					ToPreference:   next.Name,
+					Context:        "request",
+				})
+				// Record metrics
+				preferenceFallbacks.WithLabelValues(current, next.Name).Inc()
+				// Pass preference fallback info to next tryRoute call
 				preferenceFallback = true
 				preferenceFrom = current
 				preferenceTo = next.Name
@@ -2379,7 +2412,7 @@ var eventFileHandle *os.File
 var eventMu sync.Mutex
 
 type RouteEvent struct {
-	Timestamp string `json:"timestamp"`
+	Timestamp  string `json:"timestamp"`
 	Event      string `json:"event"`
 	RequestID  string `json:"request_id,omitempty"`
 	Provider   string `json:"provider,omitempty"`
@@ -2389,10 +2422,10 @@ type RouteEvent struct {
 	// Model is the model actually served after substitution.
 	RequestedModel string `json:"requested_model,omitempty"`
 	// ErrorKind classifies transport vs upstream vs policy failures (B-10).
-	ErrorKind   string `json:"error_kind,omitempty"`
+	ErrorKind string `json:"error_kind,omitempty"`
 	// BuildID: identifies which router build wrote this event (B-12) so
 	// telemetry from different binaries is never mixed up.
-	BuildID     string `json:"build_id,omitempty"`
+	BuildID string `json:"build_id,omitempty"`
 	// FirstChunkLatencyMS: time from request start to first downstream SSE
 	// chunk (time-to-first-byte). GAP-001.
 	FirstChunkLatencyMS int64 `json:"first_chunk_latency_ms,omitempty"`
@@ -2404,12 +2437,12 @@ type RouteEvent struct {
 	// RetryAfterSeconds: Retry-After header value captured from a 429.
 	RetryAfterSeconds int `json:"retry_after_seconds,omitempty"`
 	// KeyEnv already exists; KeyID distinguishes which key served.
-	KeyID string `json:"key_id,omitempty"`
-	Outcome    string `json:"outcome,omitempty"`
-	Status     int    `json:"status,omitempty"`
-	LatencyMS  int64  `json:"latency_ms,omitempty"`
-	Error      string `json:"error,omitempty"`
-	KeyEnv     string `json:"key_env,omitempty"`
+	KeyID           string `json:"key_id,omitempty"`
+	Outcome         string `json:"outcome,omitempty"`
+	Status          int    `json:"status,omitempty"`
+	LatencyMS       int64  `json:"latency_ms,omitempty"`
+	Error           string `json:"error,omitempty"`
+	KeyEnv          string `json:"key_env,omitempty"`
 	CooldownSeconds int    `json:"cooldown_seconds,omitempty"`
 	CooldownUntil   string `json:"cooldown_until,omitempty"`
 	FromPreference  string `json:"from_preference,omitempty"`
@@ -2590,6 +2623,9 @@ func validateConfig() error {
 		if cfg.Budget.RequestsPerMinute < 0 {
 			cfg.Budget.RequestsPerMinute = 0
 		}
+	}
+	if cfg.Size.MaxRequestMB < 0 {
+		cfg.Size.MaxRequestMB = 0
 	}
 
 	// Validate retry config
