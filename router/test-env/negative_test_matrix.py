@@ -136,6 +136,11 @@ def reset_all_mocks():
         set_mock(p, "success")
     # Do NOT call /test/reset - it truncates the events file the router writes to
     # Just let router state accumulate; we're testing negative properties across runs
+    #
+    # Sequencing caveat: run this suite STANDALONE (fresh router). If run
+    # immediately after concurrency_test.py on the same router state, N06
+    # can trip on leftover cooldowns ("no successful result") even though
+    # the router is fine — validate with a standalone run, not back-to-back.
 
 
 # ------------------------------------------------------------------ the tests
