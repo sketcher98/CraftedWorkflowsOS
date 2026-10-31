@@ -63,23 +63,25 @@ class NavigationShell:
         # Initialize screens
         self._init_screens()
         
-        # Main loop
+        # Main loop — auto-refresh ON repaints every tick; OFF freezes the
+        # display and only repaints after a key event (real consumer).
         while self.running:
             # Resize screens
             for screen in self.screens.values():
                 if hasattr(screen, 'set_size'):
                     screen.set_size(term.size.cols, term.size.rows)
-            
-            # Render current screen
-            self._render_current()
-            
+
             # Get input
             key = term.getch()
-            
-            if key != -1:
+            interacted = key != -1
+            if interacted:
                 if not self._handle_key(key):
                     break  # Quit
-            
+
+            auto = getattr(self.app_state.settings, "auto_refresh", True)
+            if auto or interacted:
+                self._render_current()
+
             # Small sleep to prevent busy loop
             curses.napms(50)
 

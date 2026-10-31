@@ -140,12 +140,17 @@ class SettingsScreen:
         for name in ("jsonl", "health", "models", "config", "process"):
             rows.append({"type": "interval", "key": name,
                          "label": f"Poll: {name}", "unit": "s"})
-        # Display — only controls that something actually reads.
-        # (event_density / compact_mode / time_format were fake controls:
-        #  nothing in rendering consumed them — removed.)
+        # Display — genuinely read toggles: auto_refresh gates the TUI
+        # repaint loop (nav_shell); show_disclaimers gates the disclaimer bar;
+        # event_density gates Overview's live-events count.
         s = self.app_state.settings
+        rows.append({"type": "bool", "key": "auto_refresh",
+                     "label": "Auto-refresh", "value": s.auto_refresh})
         rows.append({"type": "bool", "key": "show_disclaimers",
                      "label": "Disclaimers", "value": s.show_disclaimers})
+        rows.append({"type": "cycle", "key": "event_density",
+                     "label": "Event density", "value": s.event_density,
+                     "options": ["compact", "normal", "verbose"]})
         return rows
 
     # knob -> risk note shown when toggling/stepping and while cursor sits on it
@@ -569,14 +574,19 @@ class SettingsScreen:
             row_idx += 1
 
         lines.append(("", False))
-        lines.append(("DISPLAY (live — Enter to toggle)", False))
+        lines.append(("DISPLAY (live — Enter to toggle/cycle)", False))
         lines.append(("", False))
 
-        # Only genuinely consumed controls render. Auto-refresh and event
-        # density have no consumers — showing them shifted cursor indices
-        # onto the wrong knob.
+        # Order MUST match _monitor_editables so cursor indices align:
+        # auto_refresh, show_disclaimers, event_density.
+        marker = "▶ " if self.cursor == row_idx else "  "
+        lines.append((f"{marker}Auto-refresh    {'ON' if s.auto_refresh else 'OFF'}", True))
+        row_idx += 1
         marker = "▶ " if self.cursor == row_idx else "  "
         lines.append((f"{marker}Disclaimers     {'ON' if s.show_disclaimers else 'OFF'}", True))
+        row_idx += 1
+        marker = "▶ " if self.cursor == row_idx else "  "
+        lines.append((f"{marker}Event density   {s.event_density}", True))
         row_idx += 1
 
         lines.append(("", False))

@@ -598,8 +598,11 @@ class OverviewScreen:
                 return f"{age / 3600:.1f}h"
             return f"{age / 86400:.0f}d"
 
-        # NEWEST-FIRST display (newest at top), each line age-tagged
-        shown = list(reversed(events[-5:]))
+        # Event density decides how many events render (real consumer):
+        # compact=3, normal=6, verbose=10.
+        density = getattr(self.app_state.settings, "event_density", "normal")
+        ev_limit = {"compact": 3, "normal": 6, "verbose": 10}.get(density, 6)
+        shown = list(reversed(events[-ev_limit:]))
         for idx, event in enumerate(shown):
             ts = event.timestamp.strftime("%H:%M:%S") if event.timestamp else "--:--:--"
             provider = event.provider or ""
