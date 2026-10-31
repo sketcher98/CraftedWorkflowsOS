@@ -32,6 +32,14 @@ MOCK_BIN = TEST_ROOT / "mock-providers"
 ROUTER_PORT = 8646
 MOCK_PORTS = [19990, 19991, 19992]
 
+KIMI_MODEL = "moonshotai/kimi-k3"
+NEMOTRON_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+
+# The test config uses cooldown_seconds=1 / max_cooldown_seconds=2, so
+# waiting this long after a failing test guarantees no leftover cooldown
+# from the previous test can leak into the next one.
+COOLDOWN_DRAIN_S = 3
+
 @dataclass
 class TestResult:
     name: str
@@ -156,30 +164,34 @@ def run_concurrent(model, n_workers, expected_success=True, name=""):
     return TestResult(name, passed, detail, duration)
 
 
-def run_mixed_concurrent(name=""):
-    """Concurrent mix: some models succeed, some fail.
+def run_mixed_concurrent(tid=""):
+    """C04: concurrent mix where one model's routes all fail, another succeeds.
 
-    The test config has 3 providers per model. To test true failure,
-    we need ALL providers for a model to fail. We only set mock-nvidia
-    to 503 for kimi-k3, but zydit-v1/v2 will serve it.
+    Planned outcome (router-level): every kimi-k3 route (mock-nvidia,
+    mock-zydit-v1, mock-zydit-v2) returns 503 -> all 3 kimi requests fail
+    3/3 within their own preference; nemotron succeeds 3/3. Because only two
+    preferences exist, exhausted kimi requests are rescued by preference
+    fallback kimi-k3 -> nemotron, so client HTTP status is 200 for all 6
+    requests. Assert the PLANNED router-level outcomes from JSONL, not the
+    client-visible success count (which would mis-read kimi as passing).
     """
-    # Set ALL providers for kimi-k3 to fail, nemotron to succeed
-    for p in [19990, 19991, 19992]:
+    offset = mark()
+    for p in MOCK_PORTS:
         set_mock(p, "503", model_behaviors={
-            "moonshotai/kimi-k3": "503",
-            "nvidia/nemotron-3-ultra-550b-a55b": "success",
+            KIMI_MODEL: "503",
+            NEMOTRON_MODEL: "success",
         })
-    
+
     results = []
     errors = []
-    
+
     def worker(model, idx):
         ok, code, body, elapsed = chat(model)
         results.append((model, ok, code, elapsed))
         if not ok:
             errors.append((model, idx, code, body[:80]))
-    
-    models = ["moonshotai/kimi-k3"] * 3 + ["nvidia/nemotron-3-ultra-550b-a55b"] * 3
+
+    models = [KIMI_MODEL] * 3 + [NEMOTRON_MODEL] * 3
     threads = [threading.Thread(target=worker, args=(m, i)) for i, m in enumerate(models)]
     start = time.time()
     for t in threads:
@@ -187,33 +199,56 @@ def run_mixed_concurrent(name=""):
     for t in threads:
         t.join()
     duration = int((time.time() - start) * 1000)
-    
-    kimi_ok = sum(1 for r in results if r[0] == "moonshotai/kimi-k3" and r[1])
-    nemo_ok = sum(1 for r in results if r[0] == "nvidia/nemotron-3-ultra-550b-a55b" and r[1])
-    
-    passed = (kimi_ok == 0 and nemo_ok == 3)
-    detail = f"kimi: {kimi_ok}/3 failed (expected), nemo: {nemo_ok}/3 succeeded"
+
+    nemo_ok = sum(1 for r in results if r[0] == NEMOTRON_MODEL and r[1])
+
+    events = new_events(offset)
+    kimi_transient = [e for e in events
+                      if e.get("event") == "route_result"
+                      and e.get("preference") == "kimi-k3"
+                      and e.get("outcome") == "transient"]
+    kimi_success = [e for e in events
+                    if e.get("event") == "route_result"
+                    and e.get("preference") == "kimi-k3"
+                    and e.get("outcome") == "success"]
+    kimi_fb = [e for e in events
+               if e.get("event") == "preference_fallback"
+               and e.get("from_preference") == "kimi-k3"]
+
+    # Planned outcome: kimi routes fail 3/3 at router level, nemotron 3/3.
+    passed = (nemo_ok == 3 and len(kimi_success) == 0
+              and len(kimi_transient) >= 3 and len(kimi_fb) == 3)
+    detail = (f"kimi routes {len(kimi_transient)} transient/3 failed (router-level), "
+              f"nemotron {nemo_ok}/3 succeeded, "
+              f"{len(kimi_fb)} preference fallbacks kimi->nemotron")
     if errors:
         detail += f" errors: {errors[:3]}"
-    
-    # Reset all to success
-    for p in [19990, 19991, 19992]:
+
+    for p in MOCK_PORTS:
         set_mock(p, "success")
-    return TestResult(name, passed, detail, duration)
+    return TestResult(tid, passed, detail, duration)
 
 
-def run_cross_provider_concurrent(name=""):
-    """Concurrent requests to different providers for same model."""
+def run_cross_provider_concurrent(tid=""):
+    """C05: concurrent requests across providers for the same model, with one
+    provider down (mock-zydit-v1 = 503).
+
+    Planned outcome: all 6 kimi-k3 requests succeed via healthy providers
+    (mock-nvidia is first route; mock-zydit-v2 is fallback). The previous
+    version expected 4/6 and ran while C04's cooldowns were still active,
+    so every route was skipped as unhealthy and all 6 exhausted instantly.
+    """
+    offset = mark()
     set_mock(19990, "success")  # nvidia
     set_mock(19991, "503")      # zydit-v1 fails
     set_mock(19992, "success")  # zydit-v2 succeeds
-    
+
     results = []
-    
+
     def worker(provider_idx):
-        ok, code, body, elapsed = chat("moonshotai/kimi-k3")
+        ok, code, body, elapsed = chat(KIMI_MODEL)
         results.append((provider_idx, ok, code, elapsed))
-    
+
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
     start = time.time()
     for t in threads:
@@ -221,30 +256,38 @@ def run_cross_provider_concurrent(name=""):
     for t in threads:
         t.join()
     duration = int((time.time() - start) * 1000)
-    
+
     success_count = sum(1 for r in results if r[1])
-    # Should succeed: nvidia (p0) + zydit-v2 (p2) = 2/3 succeed, zydit-v1 fails
-    passed = success_count == 4  # 2/3 per worker * 6 workers = 4 successes
-    detail = f"{success_count}/6 succeeded"
-    
+    events = new_events(offset)
+    exhausted = [e for e in events if e.get("event") == "request_exhausted"]
+    passed = success_count == 6 and not exhausted
+    detail = f"{success_count}/6 succeeded (zydit-v1=503, nvidia/zydit-v2 healthy)"
+
     set_mock(19990, "success")
     set_mock(19991, "success")
     set_mock(19992, "success")
-    return TestResult(name, passed, detail, duration)
+    return TestResult(tid, passed, detail, duration)
 
 
-def run_cross_key_concurrent(name=""):
-    """Concurrent requests exercising both keys on same provider."""
-    set_mock(19990, "401", model_behaviors={
-        "moonshotai/kimi-k3": "401",
+def run_cross_key_concurrent(tid=""):
+    """C06: concurrent requests exercising multi-key rotation on the SAME provider.
+
+    Mock behavior 401_key_rotation rejects only `Bearer test-key-1`
+    (MOCK_KEY_1); `Bearer test-key-2` (MOCK_KEY_2) succeeds. Planned outcome:
+    each request's first key gets 401 -> router rotates to key2 -> success.
+    All 4 succeed and telemetry shows nvidia commits with key_env=MOCK_KEY_2.
+    """
+    offset = mark()
+    set_mock(19990, "401_key_rotation", model_behaviors={
+        KIMI_MODEL: "401_key_rotation",
     })
-    
+
     results = []
-    
+
     def worker(idx):
-        ok, code, body, elapsed = chat("moonshotai/kimi-k3")
+        ok, code, body, elapsed = chat(KIMI_MODEL)
         results.append((idx, ok, code))
-    
+
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
     start = time.time()
     for t in threads:
@@ -252,14 +295,22 @@ def run_cross_key_concurrent(name=""):
     for t in threads:
         t.join()
     duration = int((time.time() - start) * 1000)
-    
+
     success_count = sum(1 for r in results if r[1])
-    # 401 on MOCK_KEY_1 -> key rotation to MOCK_KEY_2 -> success
-    passed = all(r[1] for r in results)
-    detail = f"{sum(1 for r in results if r[1])}/4 succeeded with key rotation"
-    
+    events = new_events(offset)
+    nvidia_results = [e for e in events
+                      if e.get("event") == "route_result"
+                      and e.get("provider") == "mock-nvidia"]
+    rotated_ok = [e for e in nvidia_results
+                  if e.get("outcome") == "success"
+                  and e.get("key_env") == "MOCK_KEY_2"]
+    exhausted = [e for e in events if e.get("event") == "request_exhausted"]
+    passed = (success_count == 4 and len(rotated_ok) == 4 and not exhausted)
+    detail = (f"{success_count}/4 succeeded with key rotation "
+              f"(key_env=MOCK_KEY_2 on {len(rotated_ok)}/4 nvidia commits)")
+
     set_mock(19990, "success")
-    return TestResult(name, passed, detail, duration)
+    return TestResult(tid, passed, detail, duration)
 
 
 def run_rapid_success(name=""):
@@ -341,8 +392,8 @@ def main():
         "catalog_refresh_seconds": 21600,
         "retry": {
             "failure_limit": 1,
-            "cooldown_seconds": 2,
-            "max_cooldown_seconds": 10,
+            "cooldown_seconds": 1,
+            "max_cooldown_seconds": 2,
             "all_failed_wait_seconds": 1,
             "route_timeout_seconds": 20,
             "stream_idle_timeout_seconds": 8,
@@ -413,32 +464,35 @@ def main():
         print("=" * 78)
 
         tests = [
-            ("C01", "10 concurrent to same model", lambda n: run_concurrent("moonshotai/kimi-k3", 10, True)),
-            ("C02", "20 rapid success", lambda n: run_rapid_success()),
-            ("C03", "cross-model isolation (5 models)", lambda n: run_cross_model_isolation()),
-            ("C04", "mixed success/fail same provider", lambda n: run_mixed_concurrent()),
-            ("C05", "cross-provider concurrent (6 workers)", lambda n: run_cross_provider_concurrent()),
-            ("C06", "cross-key rotation under load", lambda n: run_cross_key_concurrent()),
+            ("C01", "10 concurrent to same model", lambda n: run_concurrent(KIMI_MODEL, 10, True, n)),
+            ("C02", "20 rapid success", lambda n: run_rapid_success(n)),
+            ("C03", "cross-model isolation", lambda n: run_cross_model_isolation(n)),
+            ("C04", "mixed success/fail same provider", lambda n: run_mixed_concurrent(n)),
+            ("C05", "cross-provider concurrent (6 workers)", lambda n: run_cross_provider_concurrent(n)),
+            ("C06", "cross-key rotation under load", lambda n: run_cross_key_concurrent(n)),
         ]
 
         results = []
         for tid, name, fn in tests:
             reset_all_mocks()
-            time.sleep(0.3)
+            # Drain any cooldowns left by the previous test (C04's failures put
+            # routes into cooldown; without waiting, later tests see every route
+            # skipped as unhealthy and exhaust instantly).
+            time.sleep(COOLDOWN_DRAIN_S)
             try:
                 start = time.time()
-                res = fn(name)
+                res = fn(tid)
                 res.duration_ms = int((time.time() - start) * 1000)
                 results.append(res)
                 status = "PASS" if res.passed else "FAIL"
-                print(f"{status}  {tid}  {res.name}")
+                print(f"{status}  {tid}  {name}")
                 print(f"        {res.detail}  ({res.duration_ms}ms)")
             except Exception as e:
                 print(f"FAIL  {tid}  {name}")
                 print(f"        ERROR: {type(e).__name__}: {e}")
                 results.append(TestResult(tid, False, f"ERROR: {type(e).__name__}: {e}", 0))
             reset_all_mocks()
-            time.sleep(0.3)
+            time.sleep(COOLDOWN_DRAIN_S)
 
         print("=" * 78)
         passed = sum(1 for r in results if r.passed)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -433,6 +434,35 @@ func main() {
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
 			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"completion_tokens_details\":{\"reasoning_tokens\":1}}}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+
+		case "401_key_rotation":
+			// Key-aware 401: only MOCK_KEY_1 (Bearer test-key-1) is rejected.
+			// MOCK_KEY_2 (Bearer test-key-2) succeeds. This lets the router's
+			// inner key-retry loop (401 -> selectProviderKey -> next key) be
+			// exercised deterministically: key1 fails, key2 succeeds.
+			if strings.TrimSpace(r.Header.Get("Authorization")) == "Bearer test-key-1" {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n\n")
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
+			fmt.Fprintf(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"completion_tokens_details\":{\"reasoning_tokens\":5}}}\n\n")
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
 			fmt.Fprintf(w, "data: [DONE]\n\n")

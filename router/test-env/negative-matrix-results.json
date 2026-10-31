@@ -3,7 +3,7 @@
     "id": "N01",
     "name": "no wrong model substitution",
     "status": "PASS",
-    "detail": "4 events, models=['moonshotai/kimi-k3']"
+    "detail": "3 events, models=['moonshotai/kimi-k3']"
   },
   {
     "id": "N02",
