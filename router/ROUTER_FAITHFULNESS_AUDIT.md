@@ -15,8 +15,8 @@
 | **RouteOps TUI** | ~90% | All screens implemented and verified |
 | **Negative Test Matrix** | 100% | 12/12 passed (MUST-NOT-HAPPEN executable) |
 | **Concurrency Tests** | ~50% | 3/6 passed |
-| **HE-04 Post-commit stream failure** | 100% | Verified via he04_test.py |
-| **Router backup residue** | N/A | 102 backup/pre/rollback files in router/ dir |
+| **HE-04 Post-commit stream failure** | PARTIAL | Router behavior verified via mock `stream_commit_then_drop`; `he04_test.py` previously did NOT assert (filtered on `he04`, router IDs are `req-…`). Rewritten 2026-10-31 to assert. |
+| **Router backup residue** | N/A | 11 backup/rollback-named files at top level; router dir 128MB total (51MB is test-env) |
 
 ---
 

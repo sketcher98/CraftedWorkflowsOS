@@ -140,25 +140,38 @@ if result.stderr:
     print("STDERR:")
     print(result.stderr)
 
-# ─── Analyze results ───
-print("\\n" + "="*60)
-print("HE-04 ANALYSIS")
+# ─── Analyze + ASSERT results ───
+print("\n" + "="*60)
+print("HE-04 ANALYSIS (asserting)")
 print("="*60)
 
-# Check router telemetry
 events_file = TEST_ROOT / "router-events.jsonl"
+import re
+REQ_RE = re.compile(r"req-\d+-\d+")
+req_events = {}
 if events_file.exists():
-    print("\\nRouter Events (relevant):")
     with open(events_file) as f:
         for line in f:
             line = line.strip()
-            if line:
-                try:
-                    evt = json.loads(line)
-                    if "he04" in evt.get("request_id", "") or "req-" in evt.get("request_id", ""):
-                        print(f"  {evt['timestamp']} | {evt['event']} | req={evt.get('request_id','')[:30]} | prov={evt.get('provider','')} | model={evt.get('model','')} | outcome={evt.get('outcome','')} | status={evt.get('status','')}")
-                except:
-                    pass
+            if not line:
+                continue
+            try:
+                evt = json.loads(line)
+            except Exception:
+                continue
+            rid = evt.get("request_id", "")
+            if REQ_RE.fullmatch(rid):
+                req_events.setdefault(rid, []).append(evt)
+
+assert req_events, "FAIL: no router request_id matched req-<unixnano>-<pid> — HE-04 window saw no traffic"
+for rid, events in req_events.items():
+    ev_names = [e.get("event", "") for e in events]
+    attempts = [n for n in ev_names if n == "route_attempt"]
+    # D-006: no fallback after commitment → exactly one route attempt per request
+    assert len(attempts) == 1, f"FAIL HE-04: {rid} had {len(attempts)} route_attempt(s); expected exactly 1 (no post-commit fallback)"
+    stalled = [events[i] for i, n in enumerate(ev_names) if "stream" in n.lower() and any(k in n.lower() for k in ("error", "stall", "idle"))]
+    assert stalled, f"FAIL HE-04: {rid} has no stream_error/stream_stalled event; expected post-commit stall signal"
+    print(f"  PASS {rid}: single attempt, stall event present ({stalled[0].get('event')})")
 
 # ─── Cleanup ───
 router_proc.terminate()
