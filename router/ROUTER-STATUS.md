@@ -11,11 +11,11 @@
 
 | Item | Value |
 |------|-------|
-| Router PID | 22253 |
+| Router PID | 11013 |
 | Listener | 127.0.0.1:8643 |
-| Binary SHA-256 | `30e5e5af38b5c94d…` (build_id `d1a8fd9`) |
-| Binary source commit | `d1a8fd9` (settings router tab: risk/trap labels) |
-| Repo main.go | `8a1cce56…` — **now ahead** of the running binary: P2 key-gauge count fix is committed but NOT yet swapped (needs maintenance window) |
+| Binary SHA-256 | `8c042099d31c7be4…` (P2 key-gauge fix build, swapped 2026-10-31) |
+| Binary source commit | `40cc6a6` (metrics: key gauges count states) |
+| Repo main.go | matches running binary (no drift) |
 | Repo config.json SHA-256 | `837bcacc14ec21a6…` |
 | Providers | 6: nvidia, zydit-v1/v2/v3/v4, mercury |
 | Preferences | 3: `minimaxai/minimax-m3.1-flash`, `nvidia/nemotron-3-ultra-550b-a55b`, `z-ai/glm-5.3-flash` |
@@ -40,9 +40,9 @@
   `req-<unixnano>-<pid>`, so the filter never matched; the script
   printed and exited, asserting nothing. Marked **PARTIAL — script is
   being made to assert** (P3).
-- **Prometheus key gauges**: FIXED in source (counts, not last-write) —
-  P2, awaiting swap. Until swapped, `/metrics` key gauges reflect only
-  the last key's state.
+- **Prometheus key gauges**: FIXED (counts, not last-write) — swapped
+  into production 2026-10-31. Live check: nvidia=3 (3 distinct keys),
+  zydit-v1..v4=1.
 - **Catalog refresh degraded on mobile data**: 517 `catalog_skip`
   events (100% DNS/timeout). Router keeps last-good catalog; routing
   works, catalog-driven gating is blind. Root cause: mobile DNS, not
