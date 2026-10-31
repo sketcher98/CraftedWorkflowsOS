@@ -144,6 +144,25 @@ class SettingsScreen:
                      "label": "Disclaimers", "value": s.show_disclaimers})
         return rows
 
+    # knob -> risk note shown when toggling/stepping and while cursor sits on it
+    KNOB_RISKS = {
+        "strategy": "Changes provider order. lkgp pins last-good; p2c/priority may route to slower or costlier providers.",
+        "cache.enabled": "Serves cached completions for TTL seconds. Only safe for deterministic requests; stale answers possible.",
+        "cache.max_size": "Higher size uses more memory; too low evicts entries early.",
+        "cache.ttl_seconds": "Higher TTL increases staleness; lower TTL reduces cache benefit.",
+        "budget.enabled": "Rejects requests over the sliding window. Set RPM deliberately or clients see extra 503s.",
+        "budget.requests_per_minute": "Too low throttles legitimate traffic; too high defeats the guard.",
+        "budget.window_seconds": "Shorter window forgets past usage faster; longer smooths bursts less.",
+        "test_timeout_seconds": "Long timeouts stall tests; short timeouts false-fail slow providers.",
+        "max_hold_seconds": "Hold parks requests before 503; too long delays the client.",
+        "cooldown_seconds": "Low values can fail providers too fast; high values starve fallbacks.",
+        "failure_limit": "Low limits quarantine routes quickly, reducing fallback availability.",
+        "hard_failed_wait_seconds": "Short waits re-probe too often; long waits leave routes down longer.",
+    }
+
+    def _knob_risk(self, key: str) -> str:
+        return self.KNOB_RISKS.get(key, "")
+
     def _router_editables(self) -> List[dict]:
         """Router retry/timeout settings from config.json."""
         try:
@@ -258,7 +277,8 @@ class SettingsScreen:
             self._flash(f"{key}: minimum is {mins[key]} (staged)")
         target[sub] = new
         self.pending_cfg = cfg
-        self._flash(f"{key}: {old} -> {new} (staged — Enter to review)")
+        self._flash(f"{key}: {old} -> {new} (staged — Enter to review)"
+                    + (f" · RISK: {self._knob_risk(key)}" if self._knob_risk(key) else ""))
 
     def _stage_router_bool(self, key: str, value: bool) -> None:
         """Stage a router bool knob (cache/budget enabled) via the diff gate."""
@@ -271,7 +291,8 @@ class SettingsScreen:
         target = cfg.setdefault(section, {})
         target[sub] = value
         self.pending_cfg = cfg
-        self._flash(f"{key}: {'ON' if value else 'OFF'} staged — Enter to review")
+        self._flash(f"{key}: {'ON' if value else 'OFF'} staged — Enter to review"
+                    + (f" · RISK: {self._knob_risk(key)}" if self._knob_risk(key) else ""))
 
     def _stage_router_strategy(self, mode: str) -> None:
         """Stage a routing-strategy change (config top-level "strategy")."""
@@ -282,7 +303,8 @@ class SettingsScreen:
             return
         cfg["strategy"] = "" if mode == "configured" else mode
         self.pending_cfg = cfg
-        self._flash(f"strategy: {mode} staged — Enter to review")
+        self._flash(f"strategy: {mode} staged — Enter to review"
+                    + (f" · RISK: {self._knob_risk('strategy')}" if self._knob_risk('strategy') else ""))
 
     def _stage_router_text(self, key: str, value: str) -> None:
         """Stage a routeops text knob (test_prompt) via the diff gate."""
@@ -552,6 +574,13 @@ class SettingsScreen:
         lines.append(("", False))
         lines.append(("On confirmed save: the router is restarted automatically.", False))
         lines.append(("Manual restart: bash ~/CraftedWorkflowsOS/router/scripts/startr", False))
+
+        # Risk note for the knob under the cursor (dim, under the list)
+        if 0 <= self.cursor < len(editables):
+            risk = self._knob_risk(editables[self.cursor]["key"])
+            if risk:
+                lines.append(("", False))
+                lines.append(("⚠ RISK: " + risk, False))
 
         n_editable = len(editables)
         if self.cursor >= n_editable:
