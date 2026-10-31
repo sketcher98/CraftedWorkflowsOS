@@ -63,7 +63,8 @@ class RoutesScreen:
                     self.current_pref_index = 0
                 return True
 
-            # Providers view: ↑/↓ select a provider in the list
+            # Providers view: ↑/↓ select a provider; m = model browser, c =
+            # test bench, Esc = back to the routes tab.
             if self.view_tab == 1:
                 ed = self.editor
                 if key in (curses.KEY_UP, ord('k')):
@@ -72,6 +73,17 @@ class RoutesScreen:
                 if key in (curses.KEY_DOWN, ord('j')):
                     provs = ed._cfg_provs() if ed.ed else []
                     ed.pick_idx = min(max(0, len(provs) - 1), ed.pick_idx + 1)
+                    return True
+                if key == ord('m'):
+                    provs = ed._cfg_provs() if ed.ed else []
+                    if 0 <= ed.pick_idx < len(provs):
+                        ed.open_model_browser(provs[ed.pick_idx]["name"])
+                    return True
+                if key == ord('c'):
+                    ed.open_bench()
+                    return True
+                if key == 27:
+                    self.view_tab = 0
                     return True
             # Model Test Bench view: space toggle, r run, x clear, ↑/↓ slot
             if self.view_tab == 2:
@@ -220,7 +232,7 @@ class RoutesScreen:
                 ed.mb_to_bench()
                 return True
             if key == 27:
-                ed.mode = "prov_mgmt"  # back to provider selection, NOT routes home
+                ed.mode = "closed"  # close overlay; back to the current Routes tab view
                 return True
             return True
         if ed.mode == "test_bench":
@@ -240,7 +252,7 @@ class RoutesScreen:
                 ed.bench_clear()
                 return True
             if key == 27:
-                ed.mode = "prov_mgmt"  # back to provider selection, NOT routes home
+                ed.mode = "closed"  # close overlay; back to the current Routes tab view
                 return True
             return True
         if ed.mode == "edit":
