@@ -301,13 +301,13 @@ class SettingsScreen:
         old = target.get(sub, 0)
         step = 1 if old < 10 else (5 if old < 60 else 10)
         new = max(0, old + delta * step)
-        # S4: enforce sane minimums for timeout/limit knobs.
+        # S4: enforce sane minimums for timeout/limit knobs. Cache TTL and
+        # budget window have NO floor — 0 is a legal value and users must be
+        # able to step back down to it.
         mins = {"failure_limit": 1, "cooldown_seconds": 1,
                 "hard_failed_wait_seconds": 1, "all_failed_wait_seconds": 1,
                 "route_timeout_seconds": 1, "stream_idle_timeout_seconds": 1,
-                "first_event_timeout_seconds": 1, "test_timeout_seconds": 5,
-                "cache.ttl_seconds": 5, "budget.window_seconds": 5,
-                "budget.requests_per_minute": 0}
+                "first_event_timeout_seconds": 1, "test_timeout_seconds": 1}
         if key in mins and new < mins[key]:
             new = mins[key]
             self._flash(f"{key}: minimum is {mins[key]} (staged)")
