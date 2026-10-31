@@ -126,6 +126,10 @@ class SettingsScreen:
         if self.current_tab == 0:
             return self._monitor_editables()
         elif self.current_tab == 1:
+            # Use the staged config when present so repeated Enters cycle
+            # forward from the STAGED value, not from disk every time.
+            if self.pending_cfg is not None:
+                return self._router_editables(self.pending_cfg)
             return self._router_editables()
         return []  # Paths tab is read-only
 
@@ -163,12 +167,14 @@ class SettingsScreen:
     def _knob_risk(self, key: str) -> str:
         return self.KNOB_RISKS.get(key, "")
 
-    def _router_editables(self) -> List[dict]:
-        """Router retry/timeout settings from config.json."""
-        try:
-            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
-        except Exception:
-            return []
+    def _router_editables(self, cfg: dict = None) -> List[dict]:
+        """Router retry/timeout settings. cfg may be the STAGED config (so
+        rows reflect pending values); otherwise the on-disk config is read."""
+        if cfg is None:
+            try:
+                cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+            except Exception:
+                return []
         r = cfg.get("retry", {})
         ro = cfg.get("routeops", {})
         c = cfg.get("cache", {})
@@ -240,7 +246,22 @@ class SettingsScreen:
                 setattr(s, key, not getattr(s, key, False))
                 self._flash(f"{item['label']}: {'ON' if getattr(s, key) else 'OFF'}")
         elif item["type"] == "cycle":
-            pass  # Enter cycles
+            if self.current_tab == 1:
+                # +/- cycles the strategy mode (forward/backward), staged.
+                opts = item["options"]
+                current = item.get("value", opts[0])
+                idx = opts.index(current) if current in opts else 0
+                next_val = opts[(idx + delta) % len(opts)]
+                self._stage_router_strategy(next_val)
+            else:
+                key = item["key"]
+                s = self.app_state.settings
+                opts = item["options"]
+                current = getattr(s, key, opts[0])
+                idx = opts.index(current) if current in opts else 0
+                next_val = opts[(idx + delta) % len(opts)]
+                setattr(s, key, next_val)
+                self._flash(f"{item['label']}: {next_val}")
 
     def _adjust_interval(self, name: str, delta: int) -> None:
         """Live-adjust a worker poll interval."""
@@ -350,11 +371,15 @@ class SettingsScreen:
             key = item["key"]
             opts = item["options"]
             if self.current_tab == 1:
-                # Router tab: stage the next strategy mode through the gate.
-                current = item.get("value", opts[0])
-                idx = opts.index(current) if current in opts else 0
-                next_val = opts[(idx + 1) % len(opts)]
-                self._stage_router_strategy(next_val)
+                # Router tab: Enter cycles while nothing staged; once staged,
+                # Enter reviews the diff (commit path). +/- also cycles.
+                if self.pending_cfg is not None:
+                    self._open_diff_preview()
+                else:
+                    current = item.get("value", opts[0])
+                    idx = opts.index(current) if current in opts else 0
+                    next_val = opts[(idx + 1) % len(opts)]
+                    self._stage_router_strategy(next_val)
             else:
                 current = getattr(s, key, opts[0])
                 idx = opts.index(current) if current in opts else 0
@@ -563,7 +588,7 @@ class SettingsScreen:
         lines.append(("Commit auto-restarts the router — changes apply immediately", False))
         lines.append(("", False))
 
-        editables = self._router_editables()
+        editables = self._router_editables(cfg)
         for i, item in enumerate(editables):
             marker = "▶ " if self.cursor == i else "  "
             if item["type"] == "text":
@@ -571,7 +596,7 @@ class SettingsScreen:
                 lines.append((f"{marker}{item['label']:<28} {val}", True))
             elif item["type"] == "cycle":
                 val = item.get("value", "configured")
-                lines.append((f"{marker}{item['label']:<28} {val}  [Enter]=cycle", True))
+                lines.append((f"{marker}{item['label']:<28} {val}  [Enter]/+/-=cycle", True))
             else:
                 section, sub = self._router_section(item["key"])
                 cfg_sec = {"retry": r, "routeops": ro, "cache": c, "budget": b}.get(section, {})
