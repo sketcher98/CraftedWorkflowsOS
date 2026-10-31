@@ -80,13 +80,29 @@ type Config struct {
 	Host                  string       `json:"host"`
 	Port                  int          `json:"port"`
 	CatalogRefreshSeconds int          `json:"catalog_refresh_seconds"`
-	// Strategy selects the routing strategy: "" (default, configured order)
-	// or "lkgp" (opt-in). Previously LKGP was applied unconditionally,
-	// silently overriding the configured provider order (AUDIT-005).
+	// Strategy selects the routing strategy: "" / "configured" (default,
+	// configured order), "lkgp" (opt-in), "priority", or "p2c".
+	// Validated against the strategy trait table (strategy/traits.go).
 	Strategy    string       `json:"strategy"`
 	Retry       RetryConfig  `json:"retry"`
 	Preferences []Preference `json:"preferences"`
 	Providers   []*Provider  `json:"providers"`
+	// Cache: exact-match response cache (non-stream requests only).
+	Cache CacheConfig `json:"cache"`
+	// Budget: per-provider sliding-window admission limits.
+	Budget BudgetConfig `json:"budget"`
+}
+
+type CacheConfig struct {
+	Enabled bool  `json:"enabled"`
+	MaxSize int   `json:"max_size"`
+	TTLSeconds int `json:"ttl_seconds"`
+}
+
+type BudgetConfig struct {
+	Enabled      bool `json:"enabled"`
+	RequestsPerMinute int `json:"requests_per_minute"` // per provider, 0 = unlimited
+	WindowSeconds     int `json:"window_seconds"`       // sliding window (default 60)
 }
 
 var (
@@ -96,6 +112,9 @@ var (
 
 // StrategyRegistry holds all routing strategies
 var strategyRegistry *strategy.Registry
+
+// responseCache is the exact-match cache (enabled via config).
+var responseCache *ExactMatchCache
 
 // LKGP state is now managed by the LKGPStrategy
 
@@ -344,38 +363,6 @@ func providerKeyFailed(p *Provider, env string) {
 	})
 }
 
-func selectProviderKey(p *Provider) (string, string, bool) {
-	now := time.Now()
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.keys == nil {
-		p.keys = make(map[string]*KeyHealth)
-	}
-
-	for _, env := range providerKeyEnvs(p) {
-		key := os.Getenv(env)
-		if key == "" {
-			continue
-		}
-
-		h := p.keys[env]
-		if h == nil {
-			h = &KeyHealth{}
-			p.keys[env] = h
-		}
-
-		if h.HardFailed || (!h.CooldownTil.IsZero() && now.Before(h.CooldownTil)) {
-			continue
-		}
-
-		return env, key, true
-	}
-
-	return "", "", false
-}
-
 func providerKeyHealth(p *Provider, env string) *KeyHealth {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -589,6 +576,18 @@ func requestModel(body []byte) string {
 	}
 
 	return strings.TrimSpace(payload.Model)
+}
+
+// requestStream reports whether the request asked for streaming (cache is
+// non-stream only).
+func requestStream(body []byte) bool {
+	var payload struct {
+		Stream bool `json:"stream"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return false
+	}
+	return payload.Stream
 }
 
 func preferenceForModel(model string) *Preference {
@@ -1543,9 +1542,26 @@ func tryRoute(
 		w.Header().Set("X-Router-Preference-To", preferenceTo)
 	}
 
-	keyEnv, key, ok := selectProviderKey(p)
+	keyEnv, key, ok := selectProviderKey(p, map[string]bool{})
 	if !ok {
 		return false, false, fmt.Errorf("no usable API key for provider %s", p.Name)
+	}
+
+	// S11/S12: local sliding-window admission (reserve→refund on reject).
+	cfgMu.RLock()
+	budgetEnabled := cfg.Budget.Enabled
+	budgetRPM := cfg.Budget.RequestsPerMinute
+	budgetWin := cfg.Budget.WindowSeconds
+	cfgMu.RUnlock()
+	if budgetEnabled && budgetRPM > 0 {
+		win := time.Duration(budgetWin) * time.Second
+		cnt := budgetReg.windowFor(p.Name, keyEnv, win).Reserve(1)
+		if cnt > int64(budgetRPM) {
+			budgetReg.windowFor(p.Name, keyEnv, win).Refund(1)
+			log.Printf("budget reject provider=%s model=%s key_env=%s count=%d limit=%d",
+				p.Name, route.Model, keyEnv, cnt, budgetRPM)
+			return false, true, fmt.Errorf("provider=%s window exceeded (%d/%d)", p.Name, cnt, budgetRPM)
+		}
 	}
 
 	defer func() {
@@ -1590,6 +1606,34 @@ func tryRoute(
 		Model:      route.Model,
 		Preference: preferenceName,
 	})
+
+	// Exact-match cache: non-stream only. Hit serves immediately (with a
+	// telemetry event); miss tees the response for storage on success.
+	var cacheKeyStr string
+	var cacheRec *teeWriter
+	if responseCache != nil && !requestStream(body) {
+		var payload map[string]interface{}
+		if json.Unmarshal(body, &payload) == nil {
+			cacheKeyStr = cacheKey(payload)
+			if ent, ok := responseCache.Get(cacheKeyStr); ok {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("X-Router-Cache", "HIT")
+				w.WriteHeader(ent.Status)
+				_, _ = w.Write(ent.Body)
+				logRouteEvent(RouteEvent{
+					Event:      "cache_hit",
+					RequestID:  requestID,
+					Provider:   p.Name,
+					Model:      route.Model,
+					Preference: preferenceName,
+					Status:     ent.Status,
+				})
+				return true, false, nil
+			}
+			cacheRec = &teeWriter{ResponseWriter: w, status: 200}
+			w = cacheRec
+		}
+	}
 
 	req, err := buildRequest(r, body, route, p, key)
 	if err != nil {
@@ -1680,7 +1724,16 @@ func tryRoute(
 	// It is canceled when tryRoute returns.
 	defer cancel()
 
-	transient, permanent := classifyFailure(resp.StatusCode, nil)
+	// Failure taxonomy (Bifrost-class table + LiteLLM retryable set): body
+	// peek for 4xx classification; success never reads the stream.
+	var cls FailureClass = FailureSuccess
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		peek, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		cls = classifyFailureBody(resp.StatusCode, string(peek))
+		errorKind = cls.String()
+	}
+	transient := cls.retryable()
+	permanent := !transient && cls != FailureSuccess
 
 	if permanent {
 		routeOutcome = "permanent"
@@ -1702,12 +1755,11 @@ func tryRoute(
 		resp.Body.Close()
 
 		// F1: capture Retry-After BEFORE returning — this branch returns for
-		// 429s, so the capture must live here, not after it.
+		// 429s, so the capture must live here, not after it. Accepts int
+		// seconds OR HTTP-date (RFC 7231), sanitized to [0,60].
 		if resp.StatusCode == http.StatusTooManyRequests {
 			if ra := resp.Header.Get("Retry-After"); ra != "" {
-				if secs, perr := strconv.Atoi(ra); perr == nil {
-					retryAfterSeconds = secs
-				}
+				retryAfterSeconds = parseRetryAfter(ra)
 			}
 		}
 
@@ -1735,9 +1787,7 @@ func tryRoute(
 	// (kept for 1xx/2xx-adjacent paths; the transient branch above handles 429)
 	if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
-			if secs, perr := strconv.Atoi(ra); perr == nil {
-				retryAfterSeconds = secs
-			}
+			retryAfterSeconds = parseRetryAfter(ra)
 		}
 	}
 
@@ -1822,6 +1872,19 @@ func tryRoute(
 			route.Model,
 			err,
 		)
+	}
+
+	// Store a non-stream success into the exact-match cache.
+	if err == nil && routeOutcome == "success" && cacheRec != nil {
+		responseCache.Put(cacheKeyStr, cacheRec.buf.Bytes(), cacheRec.status)
+		logRouteEvent(RouteEvent{
+			Event:      "cache_store",
+			RequestID:  requestID,
+			Provider:   p.Name,
+			Model:      route.Model,
+			Preference: preferenceName,
+			Status:     cacheRec.status,
+		})
 	}
 
 	return true, false, err
@@ -2054,6 +2117,19 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 
 						fallbackCount++
 						fallbackFrom = p.Name
+						// S9: scoped pin clear — only drop the LKGP pin when the
+						// FAILED target IS the pinned provider; a sibling failure
+						// must not discard a healthy pin (OmniRoute staleLkgpClear).
+						if strategyRegistry != nil && cfg.Strategy == "lkgp" {
+							if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
+								if l, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
+									if l.GetPin(originalPreference) == p.Name {
+										l.DeletePin(originalPreference)
+										log.Printf("lkgp pin cleared preference=%s provider=%s (failed)", originalPreference, p.Name)
+									}
+								}
+							}
+						}
 						break
 					}
 		}
@@ -2493,9 +2569,27 @@ func validateConfig() error {
 		_ = pi
 	}
 
-	// F3/A10: strategy must be a known value.
-	if cfg.Strategy != "" && cfg.Strategy != "lkgp" {
-		return fmt.Errorf("strategy '%s' unknown (allowed: '', 'lkgp')", cfg.Strategy)
+	// F3/A10: strategy must be a known trait (""/configured, lkgp, priority,
+	// p2c). Unknown strategies fail config load — never silently default.
+	if !strategy.ValidStrategy(cfg.Strategy) {
+		return fmt.Errorf("strategy '%s' unknown (allowed: '', 'configured', 'lkgp', 'priority', 'p2c')", cfg.Strategy)
+	}
+	// Cache config sanity: TTL must be positive when enabled, size bounded.
+	if cfg.Cache.Enabled {
+		if cfg.Cache.TTLSeconds <= 0 {
+			cfg.Cache.TTLSeconds = 60
+		}
+		if cfg.Cache.MaxSize <= 0 {
+			cfg.Cache.MaxSize = 512
+		}
+	}
+	if cfg.Budget.Enabled {
+		if cfg.Budget.WindowSeconds <= 0 {
+			cfg.Budget.WindowSeconds = 60
+		}
+		if cfg.Budget.RequestsPerMinute < 0 {
+			cfg.Budget.RequestsPerMinute = 0
+		}
 	}
 
 	// Validate retry config
@@ -2603,6 +2697,17 @@ func main() {
 
 	// Initialize strategy registry
 	strategyRegistry = strategy.NewRegistry()
+
+	// Exact-match cache init (config-gated).
+	cfgMu.RLock()
+	cacheCfg := cfg.Cache
+	cfgMu.RUnlock()
+	if cacheCfg.Enabled {
+		responseCache = NewExactMatchCache(cacheCfg.MaxSize,
+			time.Duration(cacheCfg.TTLSeconds)*time.Second)
+		log.Printf("exact-match cache enabled size=%d ttl=%ds",
+			cacheCfg.MaxSize, cacheCfg.TTLSeconds)
+	}
 
 	// Register LKGP strategy after config is loaded
 	strategyRegistry.Register("lkgp", strategy.NewLKGPStrategy(strategy.DefaultLKGPConfig()))

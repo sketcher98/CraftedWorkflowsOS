@@ -447,15 +447,16 @@ class RouteEditor:
         self.mode = "diff"
 
     def stage_strategy_toggle(self):
-        """Toggle routing strategy between configured order and LKGP (B-6).
-
-        Staged through the same diff gate as every other edit — nothing is
-        written until the user confirms the diff preview.
-        """
+        """Cycle routing strategy through the trait table (B-6 + S10):
+        configured -> lkgp -> priority -> p2c -> configured. Staged through
+        the same diff gate as every other edit."""
         cfg = self.ed.load()
         cur = cfg.get("strategy", "")
-        cfg["strategy"] = "" if cur == "lkgp" else "lkgp"
-        self._stage(cfg, f"strategy: {cur or 'configured order'} -> {cfg['strategy'] or 'configured order'}")
+        modes = ["", "lkgp", "priority", "p2c"]
+        idx = modes.index(cur) if cur in modes else 0
+        nxt = modes[(idx + 1) % len(modes)]
+        cfg["strategy"] = nxt
+        self._stage(cfg, f"strategy: {cur or 'configured order'} -> {nxt or 'configured order'}")
 
     # ------------------------------------------------------- rename
 

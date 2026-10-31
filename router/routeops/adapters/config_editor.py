@@ -218,17 +218,14 @@ class ConfigEditor:
             return ""
 
     def set_strategy(self, strategy: str) -> Tuple[Path, Path]:
-        """Set the routing strategy ("" = configured order, "lkgp" = LKGP).
-
-        B-6: LKGP is opt-in now. Empty string means the router honours the
-        configured provider order exactly. Uses the same backup→validate→
-        atomic-commit path as every other config change.
-        """
-        if strategy not in ("", "lkgp"):
+        """Set the routing strategy: '' / 'configured' (default order),
+        'lkgp', 'priority', or 'p2c' (trait table). Uses the same
+        backup→validate→atomic-commit path as every other config change."""
+        if strategy not in ("", "configured", "lkgp", "priority", "p2c"):
             raise ConfigEditorError(
-                f"unknown strategy '{strategy}' (allowed: '', 'lkgp')")
+                f"unknown strategy '{strategy}' (allowed: '', configured, lkgp, priority, p2c)")
         cfg = self.load()
-        cfg["strategy"] = strategy
+        cfg["strategy"] = "" if strategy == "configured" else strategy
         return self.commit(cfg, reason=f"strategy={strategy or '(default)'}")
 
     # ---------------------------------------------------------------- diff

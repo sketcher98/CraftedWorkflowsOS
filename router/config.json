@@ -128,5 +128,16 @@
         "HERMES_CUSTOM_API_INCEPTIONLABS_AI_API_KEY"
       ]
     }
+  ],
+  "disabled_providers": [
+    {
+      "name": "Xkiro",
+      "base_url": "https://api.xkiro.com/v1",
+      "key_env": "HERMES_CUSTOM_API_API_XKIRO_COM_API_KEY",
+      "key_envs": [
+        "HERMES_CUSTOM_API_API_XKIRO_COM_API_KEY"
+      ],
+      "models_discovered": true
+    }
   ]
 }

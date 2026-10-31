@@ -119,6 +119,12 @@ func (s *LKGPStrategy) getPinned(preference string) string {
 	return s.state.Get(preference)
 }
 
+// GetPin returns the pinned provider for a preference (exported for
+// scoped-clear checks).
+func (s *LKGPStrategy) GetPin(preference string) string {
+	return s.state.Get(preference)
+}
+
 // SetPin pins a provider for a preference
 func (s *LKGPStrategy) SetPin(preference, provider string) {
 	s.state.Set(preference, provider)
