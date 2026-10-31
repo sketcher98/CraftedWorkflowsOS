@@ -241,6 +241,13 @@ class SettingsScreen:
                      "options": ["configured", "lkgp", "priority", "p2c"],
                      "value": cur_strat or "configured",
                      "opt": "configured"})
+        # key-selection strategy cycle (config.json top-level "key_strategy")
+        cur_keystrat = cfg.get("key_strategy", "random")
+        rows.append({"type": "cycle", "key": "key_strategy",
+                     "label": "Keys strategy",
+                     "options": ["random", "round_robin"],
+                     "value": cur_keystrat or "random",
+                     "opt": "random"})
         return rows
 
     def _router_section(self, key: str):
@@ -281,7 +288,7 @@ class SettingsScreen:
                 current = item.get("value", opts[0])
                 idx = opts.index(current) if current in opts else 0
                 next_val = opts[(idx + delta) % len(opts)]
-                self._stage_router_strategy(next_val)
+                self._stage_router_cycle(item["key"], next_val)
             else:
                 key = item["key"]
                 s = self.app_state.settings
@@ -359,17 +366,21 @@ class SettingsScreen:
         self._flash(f"{key}: {'ON' if value else 'OFF'} staged — Enter to review"
                     + (f" · RISK: {self._knob_risk(key)}" if self._knob_risk(key) else ""))
 
-    def _stage_router_strategy(self, mode: str) -> None:
-        """Stage a routing-strategy change (config top-level "strategy")."""
+    def _stage_router_cycle(self, key: str, mode: str) -> None:
+        """Stage a top-level cycle knob (strategy / key_strategy)."""
         try:
             cfg = self._effective_cfg()
         except Exception:
             self._flash("Cannot read config")
             return
-        cfg["strategy"] = "" if mode == "configured" else mode
+        if key == "strategy":
+            cfg["strategy"] = "" if mode == "configured" else mode
+        else:
+            cfg[key] = mode
         self.pending_cfg = cfg
-        self._flash(f"strategy: {mode} staged — Enter to review"
-                    + (f" · RISK: {self._knob_risk('strategy')}" if self._knob_risk('strategy') else ""))
+        label = "Routing strategy" if key == "strategy" else "Keys strategy"
+        self._flash(f"{label}: {mode} staged — Enter to review"
+                    + (f" · RISK: {self._knob_risk(key)}" if self._knob_risk(key) else ""))
 
     def _stage_router_text(self, key: str, value: str) -> None:
         """Stage a routeops text knob (test_prompt) via the diff gate."""
@@ -416,7 +427,7 @@ class SettingsScreen:
                     current = item.get("value", opts[0])
                     idx = opts.index(current) if current in opts else 0
                     next_val = opts[(idx + 1) % len(opts)]
-                    self._stage_router_strategy(next_val)
+                    self._stage_router_cycle(key, next_val)
             else:
                 current = getattr(s, key, opts[0])
                 idx = opts.index(current) if current in opts else 0

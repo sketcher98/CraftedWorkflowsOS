@@ -34,6 +34,11 @@ type Provider struct {
 	keys      map[string]*KeyHealth
 	catalog   map[string]bool
 	catalogAt time.Time
+	// keyStrategy is the per-provider key-selection mode ("random" or
+	// "round_robin"), copied from Config.KeyStrategy at load.
+	keyStrategy string
+	// rrCounter is the round-robin cursor (only used in round_robin mode).
+	rrCounter uint64
 }
 
 type RouteHealth struct {
@@ -83,7 +88,11 @@ type Config struct {
 	// Strategy selects the routing strategy: "" / "configured" (default,
 	// configured order), "lkgp" (opt-in), "priority", or "p2c".
 	// Validated against the strategy trait table (strategy/traits.go).
-	Strategy    string       `json:"strategy"`
+	Strategy string `json:"strategy"`
+	// KeyStrategy selects the per-provider key-selection mode among healthy
+	// keys: ""/"random" (default, weighted-random) or "round_robin"
+	// (deterministic even spread). Validated at load.
+	KeyStrategy string       `json:"key_strategy"`
 	Retry       RetryConfig  `json:"retry"`
 	Preferences []Preference `json:"preferences"`
 	Providers   []*Provider  `json:"providers"`
@@ -2606,6 +2615,19 @@ func validateConfig() error {
 	// p2c). Unknown strategies fail config load — never silently default.
 	if !strategy.ValidStrategy(cfg.Strategy) {
 		return fmt.Errorf("strategy '%s' unknown (allowed: '', 'configured', 'lkgp', 'priority', 'p2c')", cfg.Strategy)
+	}
+	// Key strategy must be known: ""/"random" (default) or "round_robin".
+	switch cfg.KeyStrategy {
+	case "", "random", "round_robin":
+	default:
+		return fmt.Errorf("key_strategy '%s' unknown (allowed: '', 'random', 'round_robin')", cfg.KeyStrategy)
+	}
+	// Copy the mode onto every provider (default random).
+	for _, p := range cfg.Providers {
+		p.keyStrategy = cfg.KeyStrategy
+		if p.keyStrategy == "" {
+			p.keyStrategy = "random"
+		}
 	}
 	// Cache config sanity: TTL must be positive when enabled, size bounded.
 	if cfg.Cache.Enabled {

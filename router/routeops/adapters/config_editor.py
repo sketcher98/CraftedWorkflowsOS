@@ -277,6 +277,13 @@ class ConfigEditor:
             lines.append("STRATEGY:")
             lines.append(f"   - {old_strat or '(default: configured order)'}")
             lines.append(f"   + {new_strat or '(default: configured order)'}")
+        # Key-selection strategy (key_strategy): random / round_robin
+        old_ks = old.get("key_strategy", "random")
+        new_ks = new.get("key_strategy", "random")
+        if old_ks != new_ks:
+            lines.append("KEY STRATEGY:")
+            lines.append(f"   - {old_ks}")
+            lines.append(f"   + {new_ks}")
         old_retry = {k: v for k, v in (old.get("retry") or {}).items()}
         new_retry = {k: v for k, v in (new.get("retry") or {}).items()}
         for k in sorted(set(old_retry) | set(new_retry)):

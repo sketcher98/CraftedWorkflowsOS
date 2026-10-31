@@ -72,6 +72,17 @@ func selectProviderKey(p *Provider, usedKeys map[string]bool) (string, string, b
 		return c.env, c.key, true
 	}
 
+	// Selection mode from p.keyStrategy: "round_robin" deterministically
+	// walks healthy keys (even long-run distribution); "random" uses the
+	// uniform weighted-random below.
+	if p.keyStrategy == "round_robin" {
+		idx := int(p.rrCounter % uint64(len(pool)))
+		p.rrCounter++
+		c := pool[idx]
+		usedKeys[c.env] = true
+		return c.env, c.key, true
+	}
+
 	// Weighted random — uniform weights (all 1). Overflow-hardened: if the
 	// sum is non-finite, fall back to uniform.
 	total := float64(len(pool))
