@@ -2696,26 +2696,26 @@ func updateMetrics() {
 				routesHealthy.WithLabelValues(p.Name, model).Set(1)
 			}
 		}
+		// F5: gauges report COUNTS (not last-write): each key contributes 1
+		// to exactly one state gauge. Pre-rewrite, the loop Set(1)/Set(0)
+		// per key, so only the LAST key's state survived — misleading for
+		// multi-key providers.
+		healthyKeys, cdKeys, hfKeys := 0, 0, 0
 		for _, kh := range p.keys {
 			if kh == nil {
 				continue
 			}
-			// F5: explicit three-way set — a key that changes state must
-			// reset the other two gauges, or stale values persist.
 			if kh.HardFailed {
-				keysHardFailed.WithLabelValues(p.Name).Set(1)
-				keysInCooldown.WithLabelValues(p.Name).Set(0)
-				keysHealthy.WithLabelValues(p.Name).Set(0)
+				hfKeys++
 			} else if !kh.CooldownTil.IsZero() && time.Now().Before(kh.CooldownTil) {
-				keysHardFailed.WithLabelValues(p.Name).Set(0)
-				keysInCooldown.WithLabelValues(p.Name).Set(1)
-				keysHealthy.WithLabelValues(p.Name).Set(0)
+				cdKeys++
 			} else {
-				keysHardFailed.WithLabelValues(p.Name).Set(0)
-				keysInCooldown.WithLabelValues(p.Name).Set(0)
-				keysHealthy.WithLabelValues(p.Name).Set(1)
+				healthyKeys++
 			}
 		}
+		keysHealthy.WithLabelValues(p.Name).Set(float64(healthyKeys))
+		keysInCooldown.WithLabelValues(p.Name).Set(float64(cdKeys))
+		keysHardFailed.WithLabelValues(p.Name).Set(float64(hfKeys))
 		catalogModels.WithLabelValues(p.Name).Set(float64(len(p.catalog)))
 		p.mu.Unlock()
 	}
