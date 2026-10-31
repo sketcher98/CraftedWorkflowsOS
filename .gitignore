@@ -216,3 +216,4 @@ router-isolated/
 router-probe/
 router-rebuild/
 core
+dist/

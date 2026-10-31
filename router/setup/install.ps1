@@ -36,7 +36,9 @@ try {
         Write-Host "[router] downloading $archive ..."
         Invoke-WebRequest -UseBasicParsing -Uri "$Base/$archive" -OutFile (Join-Path $tmp $archive)
     }
-    Expand-Archive -Path (Join-Path $tmp $archive) -DestinationPath $tmp -Force
+    # Bundles ship as .tar.gz; Windows 10+ ships bsdtar which extracts them.
+    tar -xzf (Join-Path $tmp $archive) -C $tmp
+    if ($LASTEXITCODE -ne 0) { throw "tar extraction failed" }
 
     Copy-Item -Recurse -Force (Join-Path $tmp "*") $Share
     Get-ChildItem (Join-Path $Share "router.exe") | ForEach-Object { Copy-Item $_.FullName (Join-Path $Bin "router.exe") -Force }
