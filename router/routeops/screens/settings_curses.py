@@ -569,17 +569,14 @@ class SettingsScreen:
             row_idx += 1
 
         lines.append(("", False))
-        lines.append(("DISPLAY (live — Enter to toggle/cycle)", False))
+        lines.append(("DISPLAY (live — Enter to toggle)", False))
         lines.append(("", False))
 
-        marker = "▶ " if self.cursor == row_idx else "  "
-        lines.append((f"{marker}Auto-refresh    {'ON' if s.auto_refresh else 'OFF'}", True))
-        row_idx += 1
+        # Only genuinely consumed controls render. Auto-refresh and event
+        # density have no consumers — showing them shifted cursor indices
+        # onto the wrong knob.
         marker = "▶ " if self.cursor == row_idx else "  "
         lines.append((f"{marker}Disclaimers     {'ON' if s.show_disclaimers else 'OFF'}", True))
-        row_idx += 1
-        marker = "▶ " if self.cursor == row_idx else "  "
-        lines.append((f"{marker}Event density   {s.event_density}", True))
         row_idx += 1
 
         lines.append(("", False))
