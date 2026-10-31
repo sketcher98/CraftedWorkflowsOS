@@ -181,37 +181,61 @@ class SettingsScreen:
         b = cfg.get("budget", {})
         rows = []
         # S2: continuation_max was removed from config (B-15) — no dead row.
+        # opt = recommended value shown dimmed next to the current value.
+        opt = {
+            "failure_limit": 2, "cooldown_seconds": 15,
+            "max_cooldown_seconds": 120, "all_failed_wait_seconds": 10,
+            "route_timeout_seconds": 120, "stream_idle_timeout_seconds": 300,
+            "first_event_timeout_seconds": 180, "hard_failed_wait_seconds": 10,
+            "max_hold_seconds": 30, "test_timeout_seconds": 45,
+            "test_prompt": "Just Reply OK",
+            "cache.enabled": False, "cache.max_size": 512,
+            "cache.ttl_seconds": 60,
+            "budget.enabled": False, "budget.requests_per_minute": 60,
+            "budget.window_seconds": 60,
+            "strategy": "configured",
+        }
         for key in ("failure_limit", "cooldown_seconds", "max_cooldown_seconds",
                     "all_failed_wait_seconds", "route_timeout_seconds",
                     "stream_idle_timeout_seconds", "first_event_timeout_seconds",
                     "hard_failed_wait_seconds", "max_hold_seconds"):
             rows.append({"type": "int", "key": key,
-                         "label": key, "value": r.get(key, 0)})
+                         "label": key, "value": r.get(key, 0),
+                         "opt": opt[key]})
         # routeops test knobs (used by route/key tests; default 45s prompt)
         rows.append({"type": "int", "key": "test_timeout_seconds",
-                     "label": "Test timeout (s)", "value": ro.get("test_timeout_seconds", 45)})
+                     "label": "Test timeout (s)", "value": ro.get("test_timeout_seconds", 45),
+                     "opt": 45})
         rows.append({"type": "text", "key": "test_prompt",
                      "label": "Test prompt",
-                     "value": ro.get("test_prompt", "Just Reply OK")})
+                     "value": ro.get("test_prompt", "Just Reply OK"),
+                     "opt": "Just Reply OK"})
         # exact-match cache + sliding-window budget knobs (S13/S11-S12)
         rows.append({"type": "bool", "key": "cache.enabled",
-                     "label": "Cache: enabled", "value": bool(c.get("enabled"))})
+                     "label": "Cache: enabled", "value": bool(c.get("enabled")),
+                     "opt": False})
         rows.append({"type": "int", "key": "cache.max_size",
-                     "label": "Cache: max size", "value": c.get("max_size", 512)})
+                     "label": "Cache: max size", "value": c.get("max_size", 512),
+                     "opt": 512})
         rows.append({"type": "int", "key": "cache.ttl_seconds",
-                     "label": "Cache: TTL (s)", "value": c.get("ttl_seconds", 60)})
+                     "label": "Cache: TTL (s)", "value": c.get("ttl_seconds", 60),
+                     "opt": 60})
         rows.append({"type": "bool", "key": "budget.enabled",
-                     "label": "Budget: enabled", "value": bool(b.get("enabled"))})
+                     "label": "Budget: enabled", "value": bool(b.get("enabled")),
+                     "opt": False})
         rows.append({"type": "int", "key": "budget.requests_per_minute",
-                     "label": "Budget: RPM limit", "value": b.get("requests_per_minute", 0)})
+                     "label": "Budget: RPM limit", "value": b.get("requests_per_minute", 0),
+                     "opt": 60})
         rows.append({"type": "int", "key": "budget.window_seconds",
-                     "label": "Budget: window (s)", "value": b.get("window_seconds", 60)})
+                     "label": "Budget: window (s)", "value": b.get("window_seconds", 60),
+                     "opt": 60})
         # routing strategy cycle (config.json top-level "strategy")
         cur_strat = cfg.get("strategy", "")
         rows.append({"type": "cycle", "key": "strategy",
                      "label": "Routing strategy",
                      "options": ["configured", "lkgp", "priority", "p2c"],
-                     "value": cur_strat or "configured"})
+                     "value": cur_strat or "configured",
+                     "opt": "configured"})
         return rows
 
     def _router_section(self, key: str):
@@ -599,12 +623,14 @@ class SettingsScreen:
         editables = self._router_editables(cfg)
         for i, item in enumerate(editables):
             marker = "▶ " if self.cursor == i else "  "
+            rec = item.get("opt")
+            rec_note = f"  (rec {rec})" if rec is not None else ""
             if item["type"] == "text":
                 val = self.edit_buffer + "_" if (self.editing and i == self.cursor) else str(item["value"])
                 lines.append((f"{marker}{item['label']:<28} {val}", True))
             elif item["type"] == "cycle":
                 val = item.get("value", "configured")
-                lines.append((f"{marker}{item['label']:<28} {val}", True))
+                lines.append((f"{marker}{item['label']:<28} {val}{rec_note}", True))
             else:
                 section, sub = self._router_section(item["key"])
                 cfg_sec = {"retry": r, "routeops": ro, "cache": c, "budget": b}.get(section, {})
@@ -616,7 +642,7 @@ class SettingsScreen:
                     if item["key"] == "max_hold_seconds":
                         hold_note = " (hold-and-serve ON)" if (val or 0) > 0 else " (OFF)"
                     val = f"{val}{hold_note}"
-                lines.append((f"{marker}{item['label']:<28} {val}", True))
+                lines.append((f"{marker}{item['label']:<28} {val}{rec_note}", True))
 
         lines.append(("", False))
         lines.append(("On confirmed save: the router is restarted automatically.", False))
@@ -624,10 +650,16 @@ class SettingsScreen:
 
         # Risk note for the knob under the cursor (dim, under the list)
         if 0 <= self.cursor < len(editables):
-            risk = self._knob_risk(editables[self.cursor]["key"])
+            item = editables[self.cursor]
+            risk = self._knob_risk(item["key"])
+            bits = []
             if risk:
+                bits.append(risk)
+            if "opt" in item and item["opt"] is not None:
+                bits.append(f"Recommended: {item['opt']}")
+            if bits:
                 lines.append(("", False))
-                lines.append(("⚠ RISK: " + risk, False))
+                lines.append(("⚠ " + " | ".join(bits), False))
 
         n_editable = len(editables)
         if self.cursor >= n_editable:
