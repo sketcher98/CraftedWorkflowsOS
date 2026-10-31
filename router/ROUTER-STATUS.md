@@ -13,9 +13,10 @@
 |------|-------|
 | Router PID | 11013 |
 | Listener | 127.0.0.1:8643 |
-| Binary SHA-256 | `8c042099d31c7be4…` (P2 key-gauge fix build, swapped 2026-10-31) |
-| Binary source commit | `40cc6a6` (metrics: key gauges count states) |
-| Repo main.go | matches running binary (no drift) |
+| Binary SHA-256 | `8c042099…` — running build, P2 gauge fix (swap 21:36) |
+| Binary source commit | `40cc6a6` (gauge fix only) |
+| Build stamp | LOST — events carry `build_id:"dev"` (swap was built without -ldflags) |
+| Repo main.go | ahead of binary: key_strategy selector + key_accounts (unswapped). Stamped next build ready: `~/tmp/router-keys-strategy-stamped` (`fb73a863…`, build_id `3fcbf20`) |
 | Repo config.json SHA-256 | `837bcacc14ec21a6…` |
 | Providers | 6: nvidia, zydit-v1/v2/v3/v4, mercury |
 | Preferences | 3: `minimaxai/minimax-m3.1-flash`, `nvidia/nemotron-3-ultra-550b-a55b`, `z-ai/glm-5.3-flash` |
