@@ -604,7 +604,7 @@ class SettingsScreen:
                 lines.append((f"{marker}{item['label']:<28} {val}", True))
             elif item["type"] == "cycle":
                 val = item.get("value", "configured")
-                lines.append((f"{marker}{item['label']:<28} {val}  [Enter]/+/-=cycle", True))
+                lines.append((f"{marker}{item['label']:<28} {val}", True))
             else:
                 section, sub = self._router_section(item["key"])
                 cfg_sec = {"retry": r, "routeops": ro, "cache": c, "budget": b}.get(section, {})
