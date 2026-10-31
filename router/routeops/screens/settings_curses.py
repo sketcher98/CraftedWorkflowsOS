@@ -152,6 +152,8 @@ class SettingsScreen:
             return []
         r = cfg.get("retry", {})
         ro = cfg.get("routeops", {})
+        c = cfg.get("cache", {})
+        b = cfg.get("budget", {})
         rows = []
         # S2: continuation_max was removed from config (B-15) — no dead row.
         for key in ("failure_limit", "cooldown_seconds", "max_cooldown_seconds",
@@ -166,7 +168,36 @@ class SettingsScreen:
         rows.append({"type": "text", "key": "test_prompt",
                      "label": "Test prompt",
                      "value": ro.get("test_prompt", "Just Reply OK")})
+        # exact-match cache + sliding-window budget knobs (S13/S11-S12)
+        rows.append({"type": "bool", "key": "cache.enabled",
+                     "label": "Cache: enabled", "value": bool(c.get("enabled"))})
+        rows.append({"type": "int", "key": "cache.max_size",
+                     "label": "Cache: max size", "value": c.get("max_size", 512)})
+        rows.append({"type": "int", "key": "cache.ttl_seconds",
+                     "label": "Cache: TTL (s)", "value": c.get("ttl_seconds", 60)})
+        rows.append({"type": "bool", "key": "budget.enabled",
+                     "label": "Budget: enabled", "value": bool(b.get("enabled"))})
+        rows.append({"type": "int", "key": "budget.requests_per_minute",
+                     "label": "Budget: RPM limit", "value": b.get("requests_per_minute", 0)})
+        rows.append({"type": "int", "key": "budget.window_seconds",
+                     "label": "Budget: window (s)", "value": b.get("window_seconds", 60)})
+        # routing strategy cycle (config.json top-level "strategy")
+        cur_strat = cfg.get("strategy", "")
+        rows.append({"type": "cycle", "key": "strategy",
+                     "label": "Routing strategy",
+                     "options": ["configured", "lkgp", "priority", "p2c"],
+                     "value": cur_strat or "configured"})
         return rows
+
+    def _router_section(self, key: str):
+        """Map a knob key to its config section + leaf name."""
+        if key.startswith("cache."):
+            return "cache", key.split(".", 1)[1]
+        if key.startswith("budget."):
+            return "budget", key.split(".", 1)[1]
+        if key in ("test_timeout_seconds", "test_prompt"):
+            return "routeops", key
+        return "retry", key
 
     def _adjust(self, delta: int) -> None:
         """Adjust the currently selected editable value."""
@@ -210,22 +241,48 @@ class SettingsScreen:
         except Exception:
             self._flash("Cannot read config")
             return
-        section = "routeops" if key in ("test_timeout_seconds",) else "retry"
+        section, sub = self._router_section(key)
         target = cfg.setdefault(section, {})
-        old = target.get(key, 0)
+        old = target.get(sub, 0)
         step = 1 if old < 10 else (5 if old < 60 else 10)
         new = max(0, old + delta * step)
         # S4: enforce sane minimums for timeout/limit knobs.
         mins = {"failure_limit": 1, "cooldown_seconds": 1,
                 "hard_failed_wait_seconds": 1, "all_failed_wait_seconds": 1,
                 "route_timeout_seconds": 1, "stream_idle_timeout_seconds": 1,
-                "first_event_timeout_seconds": 1, "test_timeout_seconds": 5}
+                "first_event_timeout_seconds": 1, "test_timeout_seconds": 5,
+                "cache.ttl_seconds": 5, "budget.window_seconds": 5,
+                "budget.requests_per_minute": 0}
         if key in mins and new < mins[key]:
             new = mins[key]
             self._flash(f"{key}: minimum is {mins[key]} (staged)")
-        target[key] = new
+        target[sub] = new
         self.pending_cfg = cfg
         self._flash(f"{key}: {old} -> {new} (staged — Enter to review)")
+
+    def _stage_router_bool(self, key: str, value: bool) -> None:
+        """Stage a router bool knob (cache/budget enabled) via the diff gate."""
+        try:
+            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+        except Exception:
+            self._flash("Cannot read config")
+            return
+        section, sub = self._router_section(key)
+        target = cfg.setdefault(section, {})
+        target[sub] = value
+        self.pending_cfg = cfg
+        self._flash(f"{key}: {'ON' if value else 'OFF'} staged — Enter to review")
+
+    def _stage_router_strategy(self, mode: str) -> None:
+        """Stage a routing-strategy change (config top-level "strategy")."""
+        try:
+            cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
+        except Exception:
+            self._flash("Cannot read config")
+            return
+        cfg["strategy"] = "" if mode == "configured" else mode
+        self.pending_cfg = cfg
+        self._flash(f"strategy: {mode} staged — Enter to review")
 
     def _stage_router_text(self, key: str, value: str) -> None:
         """Stage a routeops text knob (test_prompt) via the diff gate."""
@@ -253,17 +310,28 @@ class SettingsScreen:
 
         if item["type"] == "bool":
             key = item["key"]
-            current = getattr(s, key, False)
-            setattr(s, key, not current)
-            self._flash(f"{item['label']}: {'ON' if not current else 'OFF'}")
+            if self.current_tab == 1:
+                # Router tab: stage the toggle through the diff gate.
+                self._stage_router_bool(key, not bool(item.get("value")))
+            else:
+                current = getattr(s, key, False)
+                setattr(s, key, not current)
+                self._flash(f"{item['label']}: {'ON' if not current else 'OFF'}")
         elif item["type"] == "cycle":
             key = item["key"]
             opts = item["options"]
-            current = getattr(s, key, opts[0])
-            idx = opts.index(current) if current in opts else 0
-            next_val = opts[(idx + 1) % len(opts)]
-            setattr(s, key, next_val)
-            self._flash(f"{item['label']}: {next_val}")
+            if self.current_tab == 1:
+                # Router tab: stage the next strategy mode through the gate.
+                current = item.get("value", opts[0])
+                idx = opts.index(current) if current in opts else 0
+                next_val = opts[(idx + 1) % len(opts)]
+                self._stage_router_strategy(next_val)
+            else:
+                current = getattr(s, key, opts[0])
+                idx = opts.index(current) if current in opts else 0
+                next_val = opts[(idx + 1) % len(opts)]
+                setattr(s, key, next_val)
+                self._flash(f"{item['label']}: {next_val}")
         elif item["type"] == "int":
             self._open_diff_preview()
         elif item["type"] == "text":
@@ -452,6 +520,8 @@ class SettingsScreen:
 
         r = cfg.get("retry", {})
         ro = cfg.get("routeops", {})
+        c = cfg.get("cache", {})
+        b = cfg.get("budget", {})
         lines = []
         lines.append(("RETRY & TIMEOUTS (+/- stages, Enter reviews diff, Enter commits)", False))
         lines.append(("Commit auto-restarts the router — changes apply immediately", False))
@@ -463,12 +533,21 @@ class SettingsScreen:
             if item["type"] == "text":
                 val = self.edit_buffer + "_" if (self.editing and i == self.cursor) else str(item["value"])
                 lines.append((f"{marker}{item['label']:<28} {val}", True))
+            elif item["type"] == "cycle":
+                val = item.get("value", "configured")
+                lines.append((f"{marker}{item['label']:<28} {val}  [Enter]=cycle", True))
             else:
-                val = ro.get(item["key"], 0) if item["key"] in ("test_timeout_seconds",) else r.get(item["key"], 0)
-                hold_note = ""
-                if item["key"] == "max_hold_seconds":
-                    hold_note = " (hold-and-serve ON)" if (val or 0) > 0 else " (OFF)"
-                lines.append((f"{marker}{item['label']:<28} {val}{hold_note}", True))
+                section, sub = self._router_section(item["key"])
+                cfg_sec = {"retry": r, "routeops": ro, "cache": c, "budget": b}.get(section, {})
+                if item["type"] == "bool":
+                    val = "ON" if cfg_sec.get(sub, False) else "OFF"
+                else:
+                    val = cfg_sec.get(sub, 0)
+                    hold_note = ""
+                    if item["key"] == "max_hold_seconds":
+                        hold_note = " (hold-and-serve ON)" if (val or 0) > 0 else " (OFF)"
+                    val = f"{val}{hold_note}"
+                lines.append((f"{marker}{item['label']:<28} {val}", True))
 
         lines.append(("", False))
         lines.append(("On confirmed save: the router is restarted automatically.", False))
