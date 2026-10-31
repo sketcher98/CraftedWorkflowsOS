@@ -11,13 +11,13 @@
 
 | Item | Value |
 |------|-------|
-| Router PID | 16253 |
+| Router PID | 30770 |
 | Listener | 127.0.0.1:8643 |
-| Binary SHA-256 | `fb73a863…` — stamped build (swap 22:17) |
-| Binary source commit | `3fcbf20` (key_strategy + key_accounts + gauge counts) |
-| Build stamp | RESTORED — events carry `build_id:"3fcbf20"` |
-| Repo main.go | matches running binary (no drift) |
-| Repo config.json SHA-256 | `837bcacc14ec21a6…` |
+| Binary SHA-256 | `1de636137b361a3d…` — catalog-aggregate build (swap 23:5x) |
+| Binary source commit | `2bae840` (license) + uncommitted main.go catalog aggregation |
+| Build stamp | `2bae840` in telemetry |
+| Repo main.go | matches running binary (aggregation verified live: 1 event/provider/cycle) |
+| Repo config.json SHA-256 | `837bcacc…` — `catalog_refresh_seconds` now 1800 (was 300) |
 | Providers | 6: nvidia, zydit-v1/v2/v3/v4, mercury |
 | Preferences | 3: `minimaxai/minimax-m3.1-flash`, `nvidia/nemotron-3-ultra-550b-a55b`, `z-ai/glm-5.3-flash` |
 | Retry | `failure_limit: 2`, `cooldown_seconds: 15`, `max_cooldown_seconds: 120`, `all_failed_wait_seconds: 10` |

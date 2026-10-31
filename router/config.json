@@ -1,7 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 8643,
-  "catalog_refresh_seconds": 300,
+  "catalog_refresh_seconds": 1800,
   "retry": {
     "failure_limit": 2,
     "cooldown_seconds": 15,

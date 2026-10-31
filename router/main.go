@@ -666,6 +666,13 @@ func refreshProviderCatalog(p *Provider) {
 		},
 	}
 
+	// Aggregate per-cycle counters: emit ONE catalog_refreshed per provider
+	// per cycle (not one per key), keeping telemetry volume proportional to
+	// providers, not keys.
+	ok := false
+	lastModels := 0
+	skippedKeys := 0
+
 	for _, keyEnv := range providerKeyEnvs(p) {
 		p.mu.Lock()
 		h := p.keys[keyEnv]
@@ -674,11 +681,13 @@ func refreshProviderCatalog(p *Provider) {
 		p.mu.Unlock()
 
 		if skip {
+			skippedKeys++
 			continue
 		}
 
 		key := os.Getenv(keyEnv)
 		if key == "" {
+			skippedKeys++
 			continue
 		}
 
@@ -731,7 +740,7 @@ func refreshProviderCatalog(p *Provider) {
 				Outcome:  "http_error",
 				Status:   status,
 			})
-			return
+			continue
 		}
 
 		var payload struct {
@@ -745,7 +754,7 @@ func refreshProviderCatalog(p *Provider) {
 
 		if err != nil {
 			log.Printf("catalog provider=%s key_env=%s decode=%v", p.Name, keyEnv, err)
-			return
+			continue
 		}
 
 		catalog := make(map[string]bool, len(payload.Data))
@@ -762,20 +771,22 @@ func refreshProviderCatalog(p *Provider) {
 		p.catalogAt = time.Now()
 		p.mu.Unlock()
 
-		log.Printf(
-			"catalog provider=%s key_env=%s models=%d",
-			p.Name,
-			keyEnv,
-			len(catalog),
-		)
-		// GAP-004: successful refresh is visible telemetry.
+		ok = true
+		lastModels = len(catalog)
+		// First healthy key wins (identical catalogs); stop fetching.
+		break
+	}
+
+	if ok {
+		log.Printf("catalog provider=%s models=%d refreshed", p.Name, lastModels)
+		// GAP-004: successful refresh is visible telemetry (aggregated).
 		logRouteEvent(RouteEvent{
 			Event:    "catalog_refreshed",
 			Provider: p.Name,
-			KeyEnv:   keyEnv,
 			Outcome:  "ok",
-			Status:   status,
-			Model:    fmt.Sprintf("%d", len(catalog)),
+			Status:   200,
+			Model:    fmt.Sprintf("%d", lastModels),
+			Error:    fmt.Sprintf("skipped_keys=%d", skippedKeys),
 		})
 		return
 	}
