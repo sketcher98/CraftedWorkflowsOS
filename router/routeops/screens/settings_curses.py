@@ -624,7 +624,10 @@ class SettingsScreen:
         for i, item in enumerate(editables):
             marker = "▶ " if self.cursor == i else "  "
             rec = item.get("opt")
-            rec_note = f"  (rec {rec})" if rec is not None else ""
+            rec_note = ""
+            if rec is not None:
+                rec_str = "ON" if rec is True else ("OFF" if rec is False else str(rec))
+                rec_note = f"  (recommended {rec_str})"
             if item["type"] == "text":
                 val = self.edit_buffer + "_" if (self.editing and i == self.cursor) else str(item["value"])
                 lines.append((f"{marker}{item['label']:<28} {val}", True))
