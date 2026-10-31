@@ -665,7 +665,7 @@ class RoutesScreen:
         # Title line: ROUTES @3, hint right-aligned, ruled below
         from routeops.adapters.config_editor import ConfigEditor as _CE
         strat = _CE().current_strategy()
-        strat_note = " · LKGP" if strat else " · configured order"
+        strat_note = f" · {strat.upper()}" if strat else " · configured order"
         title = f"ROUTES  [{len(prefs)} preferences]{strat_note}"
         hint = ("[←/→] page •  [1-3] view  [Tab]=pref  [e]=edit  [a]=add  "
                 "[d]=del  [n]=rename  [x]=test  [o]=providers  [j/k]=order")

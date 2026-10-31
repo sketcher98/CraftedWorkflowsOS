@@ -208,12 +208,12 @@ class ConfigEditor:
     # ------------------------------------------------------- strategy knob
 
     def current_strategy(self) -> str:
-        """Current routing strategy from config.json: 'lkgp' or '' (configured
-        order). Returns '' on any read failure — the UI should show the
-        default, never crash."""
+        """Current routing strategy from config.json: '' (configured order),
+        'lkgp', 'priority', or 'p2c'. Returns '' on any read failure."""
         try:
             cfg = json.loads(ROUTER_CONFIG_JSON.read_text())
-            return "lkgp" if cfg.get("strategy") == "lkgp" else ""
+            s = cfg.get("strategy", "")
+            return "lkgp" if s == "lkgp" else ("priority" if s == "priority" else ("p2c" if s == "p2c" else ""))
         except Exception:
             return ""
 

@@ -1547,22 +1547,7 @@ func tryRoute(
 		return false, false, fmt.Errorf("no usable API key for provider %s", p.Name)
 	}
 
-	// S11/S12: local sliding-window admission (reserve→refund on reject).
-	cfgMu.RLock()
-	budgetEnabled := cfg.Budget.Enabled
-	budgetRPM := cfg.Budget.RequestsPerMinute
-	budgetWin := cfg.Budget.WindowSeconds
-	cfgMu.RUnlock()
-	if budgetEnabled && budgetRPM > 0 {
-		win := time.Duration(budgetWin) * time.Second
-		cnt := budgetReg.windowFor(p.Name, keyEnv, win).Reserve(1)
-		if cnt > int64(budgetRPM) {
-			budgetReg.windowFor(p.Name, keyEnv, win).Refund(1)
-			log.Printf("budget reject provider=%s model=%s key_env=%s count=%d limit=%d",
-				p.Name, route.Model, keyEnv, cnt, budgetRPM)
-			return false, true, fmt.Errorf("provider=%s window exceeded (%d/%d)", p.Name, cnt, budgetRPM)
-		}
-	}
+	// S10/S11: budget admission moved after the cache block (see below).
 
 	defer func() {
 		outcome := routeOutcome
@@ -1632,6 +1617,24 @@ func tryRoute(
 			}
 			cacheRec = &teeWriter{ResponseWriter: w, status: 200}
 			w = cacheRec
+		}
+	}
+
+	// S11/S12: local sliding-window admission (reserve→refund on reject).
+	// Runs AFTER the cache check so cache hits never consume provider quota.
+	cfgMu.RLock()
+	budgetEnabled := cfg.Budget.Enabled
+	budgetRPM := cfg.Budget.RequestsPerMinute
+	budgetWin := cfg.Budget.WindowSeconds
+	cfgMu.RUnlock()
+	if budgetEnabled && budgetRPM > 0 && cacheRec != nil {
+		win := time.Duration(budgetWin) * time.Second
+		cnt := budgetReg.windowFor(p.Name, keyEnv, win).Reserve(1)
+		if cnt > int64(budgetRPM) {
+			budgetReg.windowFor(p.Name, keyEnv, win).Refund(1)
+			log.Printf("budget reject provider=%s model=%s key_env=%s count=%d limit=%d",
+				p.Name, route.Model, keyEnv, cnt, budgetRPM)
+			return false, true, fmt.Errorf("provider=%s window exceeded (%d/%d)", p.Name, cnt, budgetRPM)
 		}
 	}
 
@@ -1959,28 +1962,25 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		fallbackFrom := ""
 		skippedHardFailed := false
 
-		// Strategy application — OPT-IN via config.json "strategy": "lkgp".
-		// Previously LKGP ran unconditionally and could reorder the configured
-		// provider chain (AUDIT-005). Default "" = honour config order exactly.
+		// Strategy application — any trait mode (lkgp, priority, p2c) via
+		// the registry; "configured"/"" honours config order exactly.
 		orderedRoutes := preference.Routes
-		if strategyRegistry != nil && cfg.Strategy == "lkgp" {
-			if lkgpStrat, ok := strategyRegistry.Get("lkgp"); ok {
-				if lkgpStrat, ok := lkgpStrat.(*strategy.LKGPStrategy); ok {
-					// Build dummy targets for the strategy
-					dummyTargets := make([]strategy.Target, len(preference.Routes))
-					for i, rt := range preference.Routes {
-						dummyTargets[i] = strategy.Target{Provider: rt.Provider, Model: rt.Model}
-					}
+		if strategyRegistry != nil && cfg.Strategy != "" && cfg.Strategy != "configured" {
+			if strat, ok := strategyRegistry.Get(cfg.Strategy); ok {
+				// Build dummy targets for the strategy
+				dummyTargets := make([]strategy.Target, len(preference.Routes))
+				for i, rt := range preference.Routes {
+					dummyTargets[i] = strategy.Target{Provider: rt.Provider, Model: rt.Model}
+				}
 
-					orderedStrategyTargets := lkgpStrat.Apply(r.Context(), dummyTargets, &strategy.Request{
-						Preference: preference.Name,
-					})
+				orderedStrategyTargets := strat.Apply(r.Context(), dummyTargets, &strategy.Request{
+					Preference: preference.Name,
+				})
 
-					// Convert back to Route slice
-					orderedRoutes = make([]Route, len(orderedStrategyTargets))
-					for i, t := range orderedStrategyTargets {
-						orderedRoutes[i] = Route{Provider: t.Provider, Model: t.Model}
-					}
+				// Convert back to Route slice
+				orderedRoutes = make([]Route, len(orderedStrategyTargets))
+				for i, t := range orderedStrategyTargets {
+					orderedRoutes[i] = Route{Provider: t.Provider, Model: t.Model}
 				}
 			}
 		}

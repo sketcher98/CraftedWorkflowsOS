@@ -856,7 +856,7 @@ class OverviewScreen:
         except Exception:
             strat = ""
         strat_attr = curses.color_pair(5) | curses.A_BOLD
-        lines.append([(f"Strategy: {'LKGP' if strat else 'configured order'}", strat_attr)])
+        lines.append([(f"Strategy: {strat.upper() if strat else 'configured order'}", strat_attr)])
 
         return [line[:w] for line in lines]
 
