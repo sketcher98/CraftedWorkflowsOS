@@ -3,31 +3,31 @@
     "id": "C01",
     "passed": true,
     "detail": "10/10 succeeded, 0 failed",
-    "duration_ms": 78
+    "duration_ms": 81
   },
   {
     "id": "C02",
     "passed": true,
     "detail": "20/20 succeeded",
-    "duration_ms": 151
+    "duration_ms": 192
   },
   {
     "id": "C03",
     "passed": true,
     "detail": "4/4 models succeeded concurrently",
-    "duration_ms": 55
+    "duration_ms": 37
   },
   {
     "id": "C04",
     "passed": true,
-    "detail": "kimi routes 5 transient/3 failed (router-level), nemotron 3/3 succeeded, 3 preference fallbacks kimi->nemotron",
-    "duration_ms": 126
+    "detail": "kimi routes 6 transient/3 failed (router-level), nemotron 3/3 succeeded, 3 preference fallbacks kimi->nemotron",
+    "duration_ms": 129
   },
   {
     "id": "C05",
     "passed": true,
     "detail": "6/6 succeeded (zydit-v1=503, nvidia/zydit-v2 healthy)",
-    "duration_ms": 107
+    "duration_ms": 79
   },
   {
     "id": "C06",
