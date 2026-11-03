@@ -1,0 +1,49 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Hermes Gateway Watchdog - runs every 5 minutes via cron
+# Checks if gateway is running via PID file + process verification
+# Respects permanent stop flag at ~/.hermes/.runtime/gateway-disabled
+# Auto-starts via gateway-start if down and not disabled
+# Logs to ~/.hermes/logs/gateway-auto-start.log
+
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+RUNTIME_DIR="$HERMES_HOME/.runtime"
+DISABLE_FLAG="$RUNTIME_DIR/gateway-disabled"
+PID_FILE="$HERMES_HOME/gateway.pid"
+LOG_FILE="$HERMES_HOME/logs/gateway-auto-start.log"
+
+mkdir -p "$RUNTIME_DIR" "$HERMES_HOME/logs"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
+}
+
+# Check permanent disable flag
+if [[ -f "$DISABLE_FLAG" ]]; then
+    log "Gateway disabled (permanent stop flag set) — skipping start"
+    exit 0
+fi
+
+# Check if gateway is running
+if [[ -f "$PID_FILE" ]]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+        log "Gateway OK (PID $PID)"
+        exit 0
+    fi
+fi
+
+# Gateway is down, start it
+log "Gateway down — starting via gateway-start"
+if command -v gateway-start >/dev/null 2>&1; then
+    gateway-start >> "$LOG_FILE" 2>&1
+    log "gateway-start executed"
+else
+    # Fallback to direct hermes gateway run
+    log "gateway-start not in PATH, falling back to hermes gateway run --force"
+    cd "$HOME/.hermes/hermes-agent"
+    nohup "$HOME/.hermes/hermes-agent/venv/bin/hermes" gateway run --force >> "$HERMES_HOME/logs/gateway.log" 2>&1 &
+    echo $! > "$PID_FILE"
+    log "Gateway started via fallback (PID $!)"
+fi

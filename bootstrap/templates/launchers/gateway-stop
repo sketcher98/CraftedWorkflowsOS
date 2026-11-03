@@ -1,0 +1,47 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Stop Hermes Gateway
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+PID_FILE="$HERMES_HOME/gateway.pid"
+LOG_FILE="$HERMES_HOME/logs/gateway.log"
+
+# First try PID file
+if [[ -f "$PID_FILE" ]]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    # Try to extract PID from JSON if needed
+    if echo "$PID" | grep -q '^{'; then
+        PID=$(echo "$PID" | python3 -c "import sys, json; print(json.load(sys.stdin).get('pid', ''))" 2>/dev/null || echo "")
+    fi
+    if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+        echo "Stopping Gateway (PID $PID)..."
+        kill "$PID" 2>/dev/null
+        sleep 1
+        if kill -0 "$PID" 2>/dev/null; then
+            kill -9 "$PID" 2>/dev/null
+            sleep 0.5
+        fi
+        rm -f "$PID_FILE"
+        echo "Gateway stopped"
+        exit 0
+    fi
+fi
+
+# Fallback: find any running gateway process
+RUNNING_PID=$(pgrep -f "hermes gateway run" 2>/dev/null | head -1)
+if [[ -n "$RUNNING_PID" ]]; then
+    echo "Stopping Gateway (PID $RUNNING_PID, found via pgrep)..."
+    kill "$RUNNING_PID" 2>/dev/null
+    sleep 1
+    if kill -0 "$RUNNING_PID" 2>/dev/null; then
+        kill -9 "$RUNNING_PID" 2>/dev/null
+        sleep 0.5
+    fi
+    rm -f "$PID_FILE"
+    echo "Gateway stopped"
+    exit 0
+fi
+
+echo "Gateway not running"
+rm -f "$PID_FILE"
+exit 0

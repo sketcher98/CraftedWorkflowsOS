@@ -1,0 +1,11 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Stop Hermes WebUI - using ctl.sh
+set -euo pipefail
+
+WEBUI_DIR="$HOME/tmp/hermes-webui"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+
+export HERMES_HOME="$HERMES_HOME"
+
+cd "$WEBUI_DIR"
+./ctl.sh stop

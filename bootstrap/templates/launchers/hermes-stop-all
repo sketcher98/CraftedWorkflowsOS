@@ -1,0 +1,12 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Stop both WebUI and Gateway
+set -euo pipefail
+
+echo "Stopping WebUI..."
+webui-stop
+
+echo "Stopping Gateway..."
+gateway-stop
+
+echo ""
+echo "Both stopped."

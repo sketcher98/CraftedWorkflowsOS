@@ -1,0 +1,43 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Start Hermes Gateway
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+RUNTIME_DIR="$HERMES_HOME/.runtime"
+DISABLE_FLAG="$RUNTIME_DIR/gateway-disabled"
+LOG_FILE="$HERMES_HOME/logs/gateway.log"
+PID_FILE="$HERMES_HOME/gateway.pid"
+BOOT_LOG="$HERMES_HOME/logs/boot.log"
+
+mkdir -p "$RUNTIME_DIR" "$HERMES_HOME/logs"
+
+# Check permanent disable flag
+if [[ -f "$DISABLE_FLAG" ]]; then
+    echo "Gateway disabled (permanent stop flag set) — skipping start" | tee -a "$BOOT_LOG"
+    exit 0
+fi
+
+# Check if already running
+if [[ -f "$PID_FILE" ]]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    # Try to extract PID from JSON if needed
+    if echo "$PID" | grep -q '^{'; then
+        PID=$(echo "$PID" | python3 -c "import sys, json; print(json.load(sys.stdin).get('pid', ''))" 2>/dev/null || echo "")
+    fi
+    if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+        echo "Gateway already running (PID $PID)" | tee -a "$BOOT_LOG"
+        exit 0
+    fi
+fi
+
+echo "Starting Hermes Gateway..." | tee -a "$BOOT_LOG"
+
+# Use the hermes CLI to run gateway in background
+cd "$HOME/.hermes/hermes-agent"
+nohup "$HOME/.hermes/hermes-agent/venv/bin/hermes" gateway run >> "$LOG_FILE" 2>&1 &
+GATEWAY_PID=$!
+
+# Write just the PID number (not JSON)
+echo "$GATEWAY_PID" > "$PID_FILE"
+echo "Gateway started (PID $GATEWAY_PID)" | tee -a "$BOOT_LOG"
+echo "Log: $LOG_FILE"

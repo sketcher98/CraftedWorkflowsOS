@@ -1,0 +1,12 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Start both WebUI and Gateway
+set -euo pipefail
+
+echo "Starting WebUI..."
+webui-start "$@"
+
+echo "Starting Gateway..."
+gateway-start
+
+echo ""
+echo "Both started. Use 'hermes-mem' to check status."

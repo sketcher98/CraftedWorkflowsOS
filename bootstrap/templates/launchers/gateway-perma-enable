@@ -1,0 +1,17 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Re-enable Gateway (remove disable flag)
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+RUNTIME_DIR="$HERMES_HOME/.runtime"
+DISABLE_FLAG="$RUNTIME_DIR/gateway-disabled"
+BOOT_LOG="$HERMES_HOME/logs/boot.log"
+
+if [[ ! -f "$DISABLE_FLAG" ]]; then
+    echo "Gateway not disabled (no disable flag found)"
+    exit 0
+fi
+
+rm -f "$DISABLE_FLAG"
+echo "Removed disable flag: $DISABLE_FLAG" | tee -a "$BOOT_LOG"
+echo "Gateway re-enabled. Will auto-start on next cron tick or run 'gateway-start' manually."

@@ -1,0 +1,46 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Show Gateway status
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+PID_FILE="$HERMES_HOME/gateway.pid"
+LOG_FILE="$HERMES_HOME/logs/gateway.log"
+DISABLE_FLAG="$HERMES_HOME/.runtime/gateway-disabled"
+
+if [[ -f "$DISABLE_FLAG" ]]; then
+    echo "Gateway: DISABLED (permanent stop flag set)"
+    echo "Disable flag: $DISABLE_FLAG"
+    exit 0
+fi
+
+# First check PID file
+if [[ -f "$PID_FILE" ]]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    # Try to extract PID from JSON if needed
+    if echo "$PID" | grep -q '^{'; then
+        PID=$(echo "$PID" | python3 -c "import sys, json; print(json.load(sys.stdin).get('pid', ''))" 2>/dev/null || echo "")
+    fi
+    if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+        UPTIME=$(ps -p "$PID" -o etime= 2>/dev/null | sed 's/^ *//' || echo "unknown")
+        echo "Gateway: RUNNING"
+        echo "  PID:     $PID"
+        echo "  Uptime:  $UPTIME"
+        echo "  Log:     $LOG_FILE"
+        exit 0
+    fi
+fi
+
+# Fallback: check for any running gateway process
+RUNNING_PID=$(pgrep -f "hermes gateway run" 2>/dev/null | head -1)
+if [[ -n "$RUNNING_PID" ]]; then
+    UPTIME=$(ps -p "$RUNNING_PID" -o etime= 2>/dev/null | sed 's/^ *//' || echo "unknown")
+    echo "Gateway: RUNNING (PID file stale, found process)"
+    echo "  PID:     $RUNNING_PID"
+    echo "  Uptime:  $UPTIME"
+    echo "  Log:     $LOG_FILE"
+    exit 0
+fi
+
+echo "Gateway: STOPPED"
+[[ -f "$PID_FILE" ]] && echo "PID file: $PID_FILE (stale)" || echo "PID file: $PID_FILE (not found)"
+exit 1

@@ -1,0 +1,33 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Permanently disable Gateway (create disable flag + stop)
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+RUNTIME_DIR="$HERMES_HOME/.runtime"
+DISABLE_FLAG="$RUNTIME_DIR/gateway-disabled"
+PID_FILE="$HERMES_HOME/gateway.pid"
+LOG_FILE="$HERMES_HOME/logs/gateway.log"
+BOOT_LOG="$HERMES_HOME/logs/boot.log"
+
+mkdir -p "$RUNTIME_DIR"
+
+# Create disable flag
+touch "$DISABLE_FLAG"
+echo "Created disable flag: $DISABLE_FLAG" | tee -a "$BOOT_LOG"
+
+# Stop if running
+if [[ -f "$PID_FILE" ]]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+        echo "Stopping Gateway (PID $PID)..." | tee -a "$BOOT_LOG"
+        kill "$PID" 2>/dev/null
+        sleep 1
+        if kill -0 "$PID" 2>/dev/null; then
+            kill -9 "$PID" 2>/dev/null
+        fi
+        rm -f "$PID_FILE"
+        echo "Gateway stopped" | tee -a "$BOOT_LOG"
+    fi
+fi
+
+echo "Gateway permanently disabled. Use 'gateway-perma-enable' to re-enable."

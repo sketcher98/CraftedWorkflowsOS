@@ -1,0 +1,104 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Memory + Process Summary
+set -euo pipefail
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+
+echo "═══════════════════════════════════════════════════════════"
+echo "  HERMES MEMORY + PROCESS SUMMARY"
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+
+# Memory info
+echo "📊 MEMORY USAGE"
+echo "────────────────────────────────────────────────────────────"
+free -h | head -2
+echo ""
+
+# Hermes processes
+echo "🔄 HERMES PROCESSES"
+echo "────────────────────────────────────────────────────────────"
+
+# Gateway - check PID file first, then fallback to pgrep
+GW_PID_FILE="$HERMES_HOME/gateway.pid"
+GW_PID=""
+if [[ -f "$GW_PID_FILE" ]]; then
+    GW_PID=$(cat "$GW_PID_FILE" 2>/dev/null || echo "")
+    # Try to extract PID from JSON if needed
+    if echo "$GW_PID" | grep -q '^{'; then
+        GW_PID=$(echo "$GW_PID" | python3 -c "import sys, json; print(json.load(sys.stdin).get('pid', ''))" 2>/dev/null || echo "")
+    fi
+fi
+
+# Fallback: check for any running gateway process
+if [[ -z "$GW_PID" ]] || ! kill -0 "$GW_PID" 2>/dev/null; then
+    GW_PID=$(pgrep -f "hermes gateway run" 2>/dev/null | head -1)
+fi
+
+if [[ -n "$GW_PID" ]] && kill -0 "$GW_PID" 2>/dev/null; then
+    GW_UPTIME=$(ps -p "$GW_PID" -o etime= 2>/dev/null | sed 's/^ *//' || echo "?")
+    GW_MEM=$(ps -p "$GW_PID" -o rss= 2>/dev/null | awk '{printf "%.1f MB", $1/1024}' || echo "?")
+    echo "  Gateway: RUNNING (PID $GW_PID, uptime $GW_UPTIME, RSS $GW_MEM)"
+else
+    echo "  Gateway: STOPPED"
+fi
+
+# WebUI
+WUI_PID_FILE="$HERMES_HOME/webui.pid"
+if [[ -f "$WUI_PID_FILE" ]]; then
+    WUI_PID=$(cat "$WUI_PID_FILE" 2>/dev/null || echo "")
+    if [[ -n "$WUI_PID" ]] && kill -0 "$WUI_PID" 2>/dev/null; then
+        WUI_UPTIME=$(ps -p "$WUI_PID" -o etime= 2>/dev/null | sed 's/^ *//' || echo "?")
+        WUI_MEM=$(ps -p "$WUI_PID" -o rss= 2>/dev/null | awk '{printf "%.1f MB", $1/1024}' || echo "?")
+        echo "  WebUI:   RUNNING (PID $WUI_PID, uptime $WUI_UPTIME, RSS $WUI_MEM)"
+    else
+        echo "  WebUI:   STOPPED (stale PID file)"
+    fi
+else
+    echo "  WebUI:   STOPPED"
+fi
+
+# Hermes CLI processes
+HERMES_PIDS=$(pgrep -f "hermes" 2>/dev/null | grep -v "^$WUI_PID$" | grep -v "^$GW_PID$" | head -5)
+if [[ -n "$HERMES_PIDS" ]]; then
+    echo "  Other Hermes processes:"
+    for pid in $HERMES_PIDS; do
+        CMD=$(ps -p "$pid" -o cmd= 2>/dev/null | cut -c1-80)
+        echo "    PID $pid: $CMD"
+    done
+fi
+
+echo ""
+
+# Disk usage
+echo "💾 DISK USAGE"
+echo "────────────────────────────────────────────────────────────"
+echo "  ~/.hermes: $(du -sh "$HERMES_HOME" 2>/dev/null | cut -f1)"
+echo "  WebUI state: $(du -sh "$HERMES_HOME/webui" 2>/dev/null | cut -f1 || echo "N/A")"
+echo ""
+
+# Network ports
+echo "🌐 NETWORK PORTS"
+echo "────────────────────────────────────────────────────────────"
+if command -v ss >/dev/null 2>&1; then
+    ss -tlnp 2>/dev/null | grep -E "(8787|8642|gateway|hermes)" || echo "  No Hermes ports listening"
+elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:8787 -sTCP:LISTEN 2>/dev/null || echo "  No Hermes ports listening"
+fi
+echo ""
+
+# Cron status
+echo "⏰ CRON JOBS"
+echo "────────────────────────────────────────────────────────────"
+crontab -l 2>/dev/null | grep -v "^#" | grep -v "^$" || echo "  No crontab"
+echo ""
+
+# Disable flag
+DISABLE_FLAG="$HERMES_HOME/.runtime/gateway-disabled"
+if [[ -f "$DISABLE_FLAG" ]]; then
+    echo "⚠️  GATEWAY PERMANENTLY DISABLED"
+    echo "    Run 'gateway-perma-enable' to re-enable"
+    echo ""
+fi
+
+echo "═══════════════════════════════════════════════════════════"

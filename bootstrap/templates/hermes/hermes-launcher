@@ -1,0 +1,6 @@
+#!/data/data/com.termux/files/usr/bin/bash
+export LD_PRELOAD="$PREFIX/lib/libpython3.13.so${LD_PRELOAD:+:$LD_PRELOAD}"
+export NODE_OPTIONS="--max-old-space-size=448"
+export HERMES_TUI_DIR="$HOME/.hermes/hermes-agent/ui-tui"
+export UV_LINK_MODE=copy
+exec "$HOME/.hermes/hermes-agent/venv/bin/hermes" "$@"

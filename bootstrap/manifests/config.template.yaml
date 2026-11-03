@@ -1,0 +1,865 @@
+model:
+  default: mercury-3
+  provider: custom
+  base_url: https://api.inceptionlabs.ai/v1
+  context_length: 1048576
+  api_key: ''
+fallback_providers: []
+database:
+  journal_mode: wal
+runtime:
+  nofile_soft_limit: 4096
+agent:
+  max_turns: 150
+  reasoning_overrides:
+    moonshotai/kimi-k3: ''
+  reasoning_effort: xhigh
+  verbose: false
+terminal:
+  backend: local
+  cwd: .
+  home_mode: auto
+  container_cpu: 1
+  container_memory: 5120
+  container_disk: 51200
+  container_persistent: true
+  docker_mount_cwd_to_workspace: false
+  lifetime_seconds: 300
+web:
+  backend: exa
+  provider_tier:
+    exa: paid
+browser:
+  inactivity_timeout: 120
+  cloud_provider: local
+checkpoints:
+  enabled: true
+tool_output:
+  max_bytes: 75000
+  max_lines: 5000
+tool_loop_guardrails:
+  warn_after:
+    exact_failure: 2
+    same_tool_failure: 3
+    idempotent_no_progress: 2
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 5
+  warnings_# enabled: true
+  hard_stop_# enabled: true
+compression:
+  enabled: true
+  progress_notices: true
+  threshold: 0.8
+  target_ratio: 0.3
+  protect_last_n: 30
+  min_tail_user_messages: 1
+  max_attempts: 3
+  proactive_prune_tokens: 0
+  proactive_prune_min_result_chars: 8000
+  proactive_prune_min_reclaim_tokens: 4096
+  protect_first_n: 3
+  codex_gpt55_autoraise: true
+  codex_app_server_auto: native
+  codex_responses_native: false
+  codex_responses_compact_threshold: 200000
+  idle_compact_after_seconds: 0
+prompt_caching:
+  cache_ttl: 5m
+auxiliary:
+  vision:
+    provider: custom:xkiro
+    model: qwen/qwen3.5-omni-plus:free
+    key_env: ''
+    fallback_chain:
+    - provider: custom:xkiro
+      model: qwen/qwen3.8-max:free
+      base_url: ''
+      key_env: ''
+    - provider: nvidia
+      model: meta/llama-3.2-11b-vision-instruct
+      base_url: ''
+      key_env: NVIDIA_API_KEY
+  compression:
+    provider: auto
+    model: ''
+  skills_hub:
+    provider: auto
+    model: ''
+  approval:
+    provider: auto
+    model: ''
+  mcp:
+    provider: auto
+    model: ''
+  title_generation:
+    provider: nvidia
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    reasoning_effort: none
+  memory_query_rewrite:
+    provider: auto
+    model: ''
+  tts_audio_tags:
+    provider: nvidia
+    model: google/gemma-4-31b-it
+  triage_specifier:
+    provider: auto
+    model: ''
+  kanban_decomposer:
+    provider: auto
+    model: ''
+  profile_describer:
+    provider: auto
+    model: ''
+  curator:
+    provider: auto
+    model: ''
+  moa_reference:
+    provider: custom
+    model: moonshotai/kimi-k2.6
+    base_url: https://api.zydit.in/v1
+    key_env: HERMES_CUSTOM_API_ZYDIT_IN_API_KEY
+  moa_aggregator:
+    provider: nvidia
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    base_url: https://integrate.api.nvidia.com/v1
+  web_extract:
+    provider: auto
+    model: ''
+display:
+  compact: true
+  busy_input_mode: interrupt
+  bell_on_complete: true
+  show_reasoning: true
+  background_process_notifications: result
+  streaming: true
+  battery: true
+  skin: default
+  interim_assistant_messages: true
+  pet:
+    enabled: false
+    slug: homelander
+  tool_progress: all
+  cleanup_progress: false
+  long_running_notifications: true
+  busy_ack_detail: true
+  tui_statusbar: top
+tts:
+  provider: edge
+voice:
+  voice_chat_mode: gpt-live
+memory:
+  memory_char_limit: 3500
+  user_char_limit: 2000
+  nudge_interval: 10
+  memory_# enabled: true
+  user_profile_# enabled: true
+delegation:
+  model: mercury-3
+  provider: custom:inception-mecury-v1
+  base_url: ''
+  api_key: ''
+  max_iterations: 250
+  max_concurrent_children: 5
+  max_spawn_depth: 2
+moa:
+  presets:
+    default:
+      reference_models:
+      - provider: nvidia
+        model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+      - provider: nvidia
+        model: google/gemma-4-31b-it
+      - provider: nvidia
+        model: nvidia/nemotron-3-super-120b-a12b
+      aggregator:
+        provider: nvidia
+        model: nvidia/nemotron-3-ultra-550b-a55b
+      degraded_reference_policy: loud
+      fanout: user_turn
+  reference_models:
+  - provider: nvidia
+    model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+  - provider: nvidia
+    model: google/gemma-4-31b-it
+  - provider: nvidia
+    model: nvidia/nemotron-3-super-120b-a12b
+  aggregator:
+    provider: nvidia
+    model: nvidia/nemotron-3-ultra-550b-a55b
+  degraded_reference_policy: loud
+  fanout: user_turn
+  enabled: true
+skills:
+  auto_load:
+  - provider-registry
+  - craftedworkflows-coo
+  - termux-safety
+  creation_nudge_interval: 15
+  disabled:
+  - airtable
+  - ascii-video
+  - baoyu-infographic
+  - box
+  - claude-code
+  - codex
+  - comfyui
+  - computer-use
+  - evaluating-llms-harness
+  - excalidraw
+  - himalaya
+  - huggingface-hub
+  - llama-cpp
+  - manim-video
+  - obsidian
+  - opencode
+  - p5js
+  - research-paper-writing
+  - serving-llms-vllm
+  - songsee
+  - songwriting-and-ai-music
+  - touchdesigner-mcp
+  - weights-and-biases
+  - xurl
+approvals:
+  mode: manual
+command_allowlist:
+- kill hermes/gateway process (self-termination)
+- execute_code
+- script execution via -e/-c flag
+plugins:
+  enabled:
+  - disk-cleanup
+  - digital-marketing-pro
+  - image_gen/openai
+  - memlock
+  - platforms/telegram
+  - skill-retrieval
+  - superpowers/.hermes-plugin
+  - web/exa
+  - web/firecrawl
+  - web/browserbase
+  - web/browseruse
+  disabled:
+  - browser/browser_use
+  - browser/browserbase
+  - browser/firecrawl
+  - cron_providers/chronos
+  - dashboard_auth/basic
+  - dashboard_auth/drain
+  - dashboard_auth/nous
+  - dashboard_auth/self_hosted
+  - google_meet
+  - image_gen/deepinfra
+  - image_gen/fal
+  - image_gen/krea
+  - image_gen/meta-ai
+  - image_gen/openai-codex
+  - image_gen/openrouter
+  - image_gen/xai
+  - observability/langfuse
+  - platforms/a2a
+  - platforms/buzz
+  - platforms/dingtalk
+  - platforms/discord
+  - platforms/email
+  - platforms/feishu
+  - platforms/google_chat
+  - platforms/homeassistant
+  - platforms/irc
+  - platforms/line
+  - platforms/matrix
+  - platforms/mattermost
+  - platforms/ntfy
+  - platforms/photon
+  - platforms/raft
+  - platforms/simplex
+  - platforms/slack
+  - platforms/sms
+  - platforms/teams
+  - platforms/wecom
+  - platforms/whatsapp
+  - rtk-rewrite
+  - security-guidance
+  - spotify
+  - teams_pipeline
+  - video_gen/deepinfra
+  - video_gen/fal
+  - video_gen/openrouter
+  - video_gen/xai
+  - web/brave_free
+  - web/ddgs
+  - web/keenable
+  - web/parallel
+  - web/perplexity
+  - web/searxng
+  - web/tavily
+  - web/xai
+  entries:
+    planning-with-files:
+      allow_tool_override: false
+    skill-retrieval:
+      allow_tool_override: false
+    memlock:
+      allow_tool_override: false
+kanban:
+  default_assignee: default
+  max_in_progress: 1
+code_execution:
+  timeout: 300
+  max_tool_calls: 50
+tools:
+  tool_search:
+    enabled: 'on'
+streaming:
+  enabled: true
+onboarding:
+  seen:
+    tool_progress_prompt: true
+    busy_input_prompt: true
+    openclaw_residue_cleanup: true
+updates:
+  pre_update_backup: false
+  backup_keep: 5
+  non_interactive_local_changes: stash
+_config_version: 45
+mcp_servers:
+  notion:
+    url: https://mcp.notion.com/mcp
+    auth: ''
+    enabled: true
+  composio:
+    url: https://backend.composio.dev/tool_router/trs_NLGKsm4xb5_f/mcp
+    connect_timeout: 60.0
+    headers:
+      Authorization: ''
+    enabled: true
+  zernio:
+    url: https://mcp.zernio.com/mcp
+    connect_timeout: 60.0
+    headers:
+      Authorization: ''
+    enabled: true
+  twitter:
+    command: /data/data/com.termux/files/home/.hermes/hermes-agent/venv/bin/python
+    args:
+    - -m
+    - twitter_mcp.server
+    env:
+      PYTHONPATH: /data/data/com.termux/files/home/.hermes/twitter-mcp
+      TWITTER_COOKIES: /data/data/com.termux/files/home/.config/twitter-mcp/cookies.json
+      LD_PRELOAD: /data/data/com.termux/files/usr/lib/libpython3.13.so
+    connect_timeout: 60
+    timeout: 180
+    enabled: true
+  twelve-data:
+    url: https://mcp.twelvedata.com/mcp
+    auth: ''
+    enabled: false
+  arcade-x:
+    url: https://api.arcade.dev/mcp/gw_3IEZ8nzgwsSw9VC0KbE1zM2exxT
+    auth: ''
+image_gen:
+  provider: openai
+  model: gpt-image-2.5-flare
+platform_toolsets:
+  cli:
+  - browser
+  - clarify
+  - code_execution
+  - connections
+  - context_engine
+  - cronjob
+  - delegation
+  - file
+  - image_gen
+  - kanban
+  - memory
+  - session_search
+  - skills
+  - terminal
+  - todo
+  - vision
+  - web
+  telegram:
+  - browser
+  - clarify
+  - code_execution
+  - connections
+  - context_engine
+  - cronjob
+  - delegation
+  - file
+  - image_gen
+  - kanban
+  - memory
+  - session_search
+  - skills
+  - terminal
+  - todo
+  - tts
+  - vision
+  - web
+  discord:
+  - hermes-discord
+  whatsapp:
+  - hermes-whatsapp
+  slack:
+  - hermes-slack
+  signal:
+  - hermes-signal
+  homeassistant:
+  - hermes-homeassistant
+  qqbot:
+  - hermes-qqbot
+  yuanbao:
+  - hermes-yuanbao
+  teams:
+  - hermes-teams
+  google_chat:
+  - hermes-google_chat
+known_plugin_toolsets:
+  cli:
+  - a2a
+  - spotify
+  telegram:
+  - a2a
+  - spotify
+known_builtin_toolsets:
+  cli:
+  - browser
+  - clarify
+  - code_execution
+  - computer_use
+  - connections
+  - context_engine
+  - cronjob
+  - delegation
+  - discord
+  - discord_admin
+  - file
+  - homeassistant
+  - image_gen
+  - kanban
+  - memory
+  - session_search
+  - skills
+  - spotify
+  - stt
+  - terminal
+  - todo
+  - tts
+  - video
+  - video_gen
+  - vision
+  - web
+  - x_search
+  - yuanbao
+  telegram:
+  - browser
+  - clarify
+  - code_execution
+  - computer_use
+  - connections
+  - context_engine
+  - cronjob
+  - delegation
+  - discord
+  - discord_admin
+  - file
+  - homeassistant
+  - image_gen
+  - kanban
+  - memory
+  - session_search
+  - skills
+  - spotify
+  - stt
+  - terminal
+  - todo
+  - tts
+  - video
+  - video_gen
+  - vision
+  - web
+  - x_search
+  - yuanbao
+group_sessions_per_user: true
+session_reset:
+  mode: none
+  idle_minutes: 1440
+  at_hour: 4
+custom_providers:
+- name: Zydit V1
+  base_url: https://api.zydit.in/v1
+  key_env: HERMES_CUSTOM_API_ZYDIT_IN_API_KEY
+  model: z-ai/glm-5.3
+  models:
+    01-ai/yi-large: {}
+    adept/fuyu-8b: {}
+    ai21labs/jamba-1.5-large-instruct: {}
+    aisingapore/sea-lion-7b-instruct: {}
+    bigcode/starcoder2-15b: {}
+    databricks/dbrx-instruct: {}
+    deepseek-ai/deepseek-coder-6.7b-instruct: {}
+    deepseek-ai/deepseek-v4.1-flash: {}
+    google/codegemma-1.1-7b: {}
+    google/codegemma-7b: {}
+    google/deplot: {}
+    google/diffusiongemma-26b-a4b-it: {}
+    google/gemma-2b: {}
+    google/gemma-3-12b-it: {}
+    google/gemma-3-4b-it: {}
+    google/gemma-4-31b-it: {}
+    google/recurrentgemma-2b: {}
+    ibm/granite-3.0-3b-a800m-instruct: {}
+    ibm/granite-3.0-8b-instruct: {}
+    ibm/granite-34b-code-instruct: {}
+    ibm/granite-8b-code-instruct: {}
+    meta/codellama-70b: {}
+    meta/llama-3.2-11b-vision-instruct: {}
+    meta/llama-3.2-90b-vision-instruct: {}
+    meta/llama-guard-4-12b: {}
+    meta/llama2-70b: {}
+    meta/muse-glimmer-30b: {}
+    microsoft/kosmos-2: {}
+    microsoft/phi-3-vision-128k-instruct: {}
+    microsoft/phi-3.5-moe-instruct: {}
+    minimaxai/minimax-m3.1-flash: {}
+    mistralai/codestral-22b-instruct-v0.1: {}
+    mistralai/mistral-7b-instruct-v0.3: {}
+    mistralai/mistral-large: {}
+    mistralai/mistral-large-2-instruct: {}
+    mistralai/mistral-large-4-1t-a52b: {}
+    mistralai/mixtral-8x22b-v0.1: {}
+    moonshotai/kimi-k2.6: {}
+    nv-mistralai/mistral-nemo-12b-instruct: {}
+    nvidia/ai-synthetic-video-detector: {}
+    nvidia/cosmos-reason2-8b: {}
+    nvidia/embed-qa-4: {}
+    nvidia/ising-calibration-1.5-31b: {}
+    nvidia/llama-3.1-nemoguard-8b-content-safety: {}
+    nvidia/llama-3.1-nemoguard-8b-topic-control: {}
+    nvidia/llama-3.1-nemotron-51b-instruct: {}
+    nvidia/llama-3.1-nemotron-70b-instruct: {}
+    nvidia/llama-3.1-nemotron-safety-guard-8b-v3: {}
+    nvidia/llama-3.1-nemotron-ultra-253b-v1: {}
+    nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1: {}
+    nvidia/llama-3.2-nv-embedqa-1b-v1: {}
+    nvidia/llama-nemotron-embed-vl-1b-v2: {}
+    nvidia/llama3-chatqa-1.5-70b: {}
+    nvidia/mistral-nemo-minitron-8b-8k-instruct: {}
+    nvidia/nemotron-3-embed-1b: {}
+    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning: {}
+    nvidia/nemotron-3-super-120b-a12b: {}
+    nvidia/nemotron-3-ultra-550b-a55b: {}
+    nvidia/nemotron-3.5-bolt-e4b: {}
+    nvidia/nemotron-3.5-content-safety: {}
+    nvidia/nemotron-3.5-embed-1b: {}
+    nvidia/nemotron-3.5-embed-8b: {}
+    nvidia/nemotron-3.5-lightning-30b-a3b: {}
+    nvidia/nemotron-3.5-super-vl-120b-a12b: {}
+    nvidia/nemotron-4-340b-instruct: {}
+    nvidia/nemotron-4-340b-reward: {}
+    nvidia/nemotron-nano-3-30b-a3b: {}
+    nvidia/nemotron-parse: {}
+    nvidia/nemotron-parse-2.0: {}
+    nvidia/neva-22b: {}
+    nvidia/nv-embedqa-mistral-7b-v2: {}
+    nvidia/nvclip: {}
+    nvidia/riva-translate-4b-instruct: {}
+    nvidia/riva-translate-4b-instruct-v2: {}
+    nvidia/vila: {}
+    openai/gpt-oss-20b: {}
+    poolside/laguna-xs-2.1: {}
+    snowflake/arctic-embed-l: {}
+    stepfun-ai/step-5-preview: {}
+    writer/palmyra-creative-122b: {}
+    writer/palmyra-fin-70b-32k: {}
+    writer/palmyra-med-70b: {}
+    writer/palmyra-med-70b-32k: {}
+    z-ai/glm-5.3-flash: {}
+    zyphra/zamba2-7b-instruct: {}
+    chatjimmy/llama3.1-8B: {}
+  models_discovered: true
+- name: Zydit V2
+  base_url: https://api.zydit.in/v2
+  key_env: HERMES_CUSTOM_API_ZYDIT_IN_API_KEY
+  model: z-ai/glm-5.3
+  models:
+    01-ai/yi-large: {}
+    adept/fuyu-8b: {}
+    ai21labs/jamba-1.5-large-instruct: {}
+    aisingapore/sea-lion-7b-instruct: {}
+    bigcode/starcoder2-15b: {}
+    databricks/dbrx-instruct: {}
+    deepseek-ai/deepseek-coder-6.7b-instruct: {}
+    deepseek-ai/deepseek-v4.1-flash: {}
+    google/codegemma-1.1-7b: {}
+    google/codegemma-7b: {}
+    google/deplot: {}
+    google/diffusiongemma-26b-a4b-it: {}
+    google/gemma-2b: {}
+    google/gemma-3-12b-it: {}
+    google/gemma-3-4b-it: {}
+    google/gemma-4-31b-it: {}
+    google/recurrentgemma-2b: {}
+    ibm/granite-3.0-3b-a800m-instruct: {}
+    ibm/granite-3.0-8b-instruct: {}
+    ibm/granite-34b-code-instruct: {}
+    ibm/granite-8b-code-instruct: {}
+    meta/codellama-70b: {}
+    meta/llama-3.2-11b-vision-instruct: {}
+    meta/llama-3.2-90b-vision-instruct: {}
+    meta/llama-guard-4-12b: {}
+    meta/llama2-70b: {}
+    meta/muse-glimmer-30b: {}
+    microsoft/kosmos-2: {}
+    microsoft/phi-3-vision-128k-instruct: {}
+    microsoft/phi-3.5-moe-instruct: {}
+    minimaxai/minimax-m3.1-flash: {}
+    mistralai/codestral-22b-instruct-v0.1: {}
+    mistralai/mistral-7b-instruct-v0.3: {}
+    mistralai/mistral-large: {}
+    mistralai/mistral-large-2-instruct: {}
+    mistralai/mistral-large-4-1t-a52b: {}
+    mistralai/mixtral-8x22b-v0.1: {}
+    moonshotai/kimi-k2.6: {}
+    nv-mistralai/mistral-nemo-12b-instruct: {}
+    nvidia/ai-synthetic-video-detector: {}
+    nvidia/cosmos-reason2-8b: {}
+    nvidia/embed-qa-4: {}
+    nvidia/ising-calibration-1.5-31b: {}
+    nvidia/llama-3.1-nemoguard-8b-content-safety: {}
+    nvidia/llama-3.1-nemoguard-8b-topic-control: {}
+    nvidia/llama-3.1-nemotron-51b-instruct: {}
+    nvidia/llama-3.1-nemotron-70b-instruct: {}
+    nvidia/llama-3.1-nemotron-safety-guard-8b-v3: {}
+    nvidia/llama-3.1-nemotron-ultra-253b-v1: {}
+    nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1: {}
+    nvidia/llama-3.2-nv-embedqa-1b-v1: {}
+    nvidia/llama-nemotron-embed-vl-1b-v2: {}
+    nvidia/llama3-chatqa-1.5-70b: {}
+    nvidia/mistral-nemo-minitron-8b-8k-instruct: {}
+    nvidia/nemotron-3-embed-1b: {}
+    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning: {}
+    nvidia/nemotron-3-super-120b-a12b: {}
+    nvidia/nemotron-3-ultra-550b-a55b: {}
+    nvidia/nemotron-3.5-bolt-e4b: {}
+    nvidia/nemotron-3.5-content-safety: {}
+    nvidia/nemotron-3.5-embed-1b: {}
+    nvidia/nemotron-3.5-embed-8b: {}
+    nvidia/nemotron-3.5-lightning-30b-a3b: {}
+    nvidia/nemotron-3.5-super-vl-120b-a12b: {}
+    nvidia/nemotron-4-340b-instruct: {}
+    nvidia/nemotron-4-340b-reward: {}
+    nvidia/nemotron-nano-3-30b-a3b: {}
+    nvidia/nemotron-parse: {}
+    nvidia/nemotron-parse-2.0: {}
+    nvidia/neva-22b: {}
+    nvidia/nv-embedqa-mistral-7b-v2: {}
+    nvidia/nvclip: {}
+    nvidia/riva-translate-4b-instruct: {}
+    nvidia/riva-translate-4b-instruct-v2: {}
+    nvidia/vila: {}
+    openai/gpt-oss-20b: {}
+    poolside/laguna-xs-2.1: {}
+    snowflake/arctic-embed-l: {}
+    stepfun-ai/step-5-preview: {}
+    writer/palmyra-creative-122b: {}
+    writer/palmyra-fin-70b-32k: {}
+    writer/palmyra-med-70b: {}
+    writer/palmyra-med-70b-32k: {}
+    z-ai/glm-5.3-flash: {}
+    zyphra/zamba2-7b-instruct: {}
+    chatjimmy/llama3.1-8B: {}
+  models_discovered: true
+- name: Zydit V3
+  base_url: https://api.zydit.in/v3
+  key_env: HERMES_CUSTOM_API_ZYDIT_IN_API_KEY
+  model: muse-spark-1.3
+  models:
+    big-pickle: {}
+    deepseek-v4-flash-max-rp: {}
+    hy3-max: {}
+    laguna-s-2.1-max: {}
+    mimo-v2.5: {}
+    muse-spark-1.3: {}
+    nemotron-3-ultra-max: {}
+    nemotron-3.5-lightning-max: {}
+    north-mini-code: {}
+    gemma-4-31b: {}
+    deepseek-r1:latest: {}
+    Qwen-3.8-Max: {}
+    dolphin3:latest: {}
+    gemma4-31b-it-pro: {}
+    glm-4.7-flash:latest: {}
+  models_discovered: true
+- name: Zydit V4
+  base_url: https://api.zydit.in/v4
+  key_env: HERMES_CUSTOM_API_ZYDIT_IN_API_KEY
+  model: glm-5
+  models:
+    big-pickle: {}
+    glm-5.3-free: {}
+    mimo-v2.6-flash: {}
+    step-5-preview-free: {}
+  models_discovered: true
+- name: Inception Mecury V1
+  base_url: https://api.inceptionlabs.ai/v1
+  key_env: HERMES_CUSTOM_API_INCEPTIONLABS_AI_API_KEY
+  model: mercury-3
+  models:
+    mercury-3: {}
+    mercury-decide: {}
+  models_discovered: true
+- name: xKiro
+  base_url: https://api.xkiro.com/v1
+  key_env: HERMES_CUSTOM_API_XKIRO_COM_API_KEY
+  model: qwen/qwen3.8-max:free
+  models:
+    google/gemini-3.6-flash: {}
+    tencent/hy4-preview: {}
+    x-ai/grok-4.5: {}
+    mistralai/ministral-14b: {}
+    anthropic/claude-sonnet-4.6: {}
+    anthropic/claude-opus-4.8: {}
+    anthropic/claude-fable-5-1: {}
+    x-ai/grok-4.7: {}
+    anthropic/claude-sonnet-5.5: {}
+    minimax/minimax-m3: {}
+    minimax/minimax-m2.7: {}
+    minimax/minimax-m2.7-highspeed: {}
+    anthropic/claude-fable-5: {}
+    deepseek/deepseek-v4-pro-0813: {}
+    deepseek/deepseek-v4.1-flash: {}
+    tencent/hy3-preview: {}
+    google/gemini-3.8-flash: {}
+    moonshotai/kimi-k2.8-preview-agent: {}
+    qwen/qwen3-vl-plus:free: {}
+    google/gemini-3.7-flash: {}
+    x-ai/grok-4.6: {}
+    anthropic/claude-opus-5: {}
+    anthropic/claude-opus-4.5: {}
+    openai/gpt-6.1-sol: {}
+    openai/gpt-6-astra: {}
+    cohere/north-mini-code: {}
+    openai/gpt-6-sol: {}
+    cohere/command-r-08-2024: {}
+    openai/gpt-5.6-luna: {}
+    openai/gpt-5.6-sol: {}
+    qwen/qwen-plus-2025-07-28:free: {}
+    sensenova/sensenova-6.8-flash-lite: {}
+    cohere/command-a: {}
+    anthropic/claude-sonnet-4: {}
+    cohere/aya-vision-32b: {}
+    mistralai/ministral-3b: {}
+    cohere/tiny-aya-earth: {}
+    cohere/tiny-aya-global: {}
+    cohere/command-r-plus-08-2024: {}
+    openai/gpt-6.1-terra: {}
+    cohere/aya-expanse-32b: {}
+    openai/gpt-5.6-terra: {}
+    cohere/tiny-aya-fire: {}
+    minimax/minimax-m3.1-flash: {}
+    cohere/command-a-plus: {}
+    nvidia/nemotron-3.5-super-vl: {}
+    google/gemini-2.5-pro: {}
+    anthropic/claude-opus-4.6: {}
+    anthropic/claude-sonnet-4.5: {}
+    openai/gpt-6-luna: {}
+    google/gemini-3.5-flash: {}
+    google/gemini-3.1-pro: {}
+    anthropic/claude-haiku-5.5: {}
+    anthropic/claude-haiku-4.5: {}
+    google/gemini-2.5-flash: {}
+    mistralai/mistral-large-4-0: {}
+    anthropic/claude-sonnet-5: {}
+    moonshotai/kimi-k3-agent: {}
+    mistralai/mistral-large-2512: {}
+    mistralai/mistral-medium-3.5: {}
+    mistralai/mistral-small-2603: {}
+    mistralai/devstral-medium: {}
+    anthropic/claude-opus-5.5: {}
+    mistralai/codestral-2508: {}
+    cohere/command-a-translate: {}
+    google/gemini-3-flash: {}
+    minimax/minimax-m2.5: {}
+    minimax/minimax-m2.1: {}
+    qwen/qwen3-omni-flash:free: {}
+    mistralai/ministral-8b: {}
+    xiaomi/mimo-v2.6-pro: {}
+    deepseek/deepseek-v4-flash-0731: {}
+    xiaomi/mimo-v2.6-flash: {}
+    anthropic/claude-opus-4.7: {}
+    minimax/minimax-m2.5-highspeed: {}
+    minimax/minimax-m2.1-highspeed: {}
+    minimax/minimax-m2: {}
+    xiaomi/mimo-v2.5: {}
+    tencent/hy3: {}
+    qwen/qwen3.6-plus:free: {}
+    qwen/qwen3.7-max:free: {}
+    qwen/qwen3.7-plus:free: {}
+    nvidia/nemotron-3-ultra: {}
+    stealth/big-pickle: {}
+    qwen/qwen3.5-omni-flash:free: {}
+    cohere/command-r7b-12-2024: {}
+    nvidia/nemotron-3-nano-omni: {}
+    qwen/qwen3.8-max:free: {}
+    qwen/qwen3.8-omni-flash:free: {}
+    qwen/qwen3.7-flash:free: {}
+    qwen/qwen3.6-max-preview:free: {}
+    qwen/qwen3-coder-plus:free: {}
+    cohere/north-small-translate: {}
+    qwen/qwen3.6-27b:free: {}
+    qwen/qwen3.5-plus:free: {}
+    cohere/command-a-vision: {}
+    cohere/command-a-reasoning: {}
+    qwen/qwen3.5-omni-plus:free: {}
+    qwen/qwen3.6-35b-a3b:free: {}
+    qwen/qwen3.5-flash:free: {}
+    cohere/tiny-aya-water: {}
+    qwen/qwen3.5-397b-a17b:free: {}
+    qwen/qwen3-max:free: {}
+  models_discovered: true
+- name: LogFare
+  base_url: https://logfare.ai/v1
+  key_env: HERMES_CUSTOM_LOGFARE_AI_API_KEY
+  models:
+    whisper-large-v3-turbo: {}
+    sdxl-lightning: {}
+    flux-2-klein-4b: {}
+    flux-2-klein-9b: {}
+    flux-2-dev: {}
+    phoenix-1.0: {}
+    logfare/auto: {}
+    flux-1-schnell: {}
+    glm-5.3: {}
+    clef: {}
+    8ball: {}
+    clef-flash: {}
+    glm-5.3-flash: {}
+    aura-2-en: {}
+    nova-3: {}
+    gemma-4-26b: {}
+    qwen-3.8-27b: {}
+    bge-small-en-v1.5: {}
+    bge-base-en-v1.5: {}
+    bge-large-en-v1.5: {}
+    bge-m3: {}
+    qwen3-embedding-0.6b: {}
+    embeddinggemma-300m: {}
+    plamo-embedding-1b: {}
+    lucid-origin: {}
+    deepseek-v4.1-flash-1017: {}
+    noctis-auto-paid: {}
+    gpt-5-mini: {}
+    noctis-auto: {}
+    obi2: {}
+    gpt-4.1-nano: {}
+  models_discovered: true
+_template_notes:
+  secrets: All secret values are injected at configure time from the secrets bundle;
+    see bootstrap/docs/PROVISIONING.md
+  generated: regenerated by make-manifests.sh

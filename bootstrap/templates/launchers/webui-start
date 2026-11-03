@@ -1,0 +1,14 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Start Hermes WebUI - using ctl.sh for proper daemon management
+set -euo pipefail
+
+WEBUI_DIR="$HOME/tmp/hermes-webui"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+PORT="${1:-8787}"
+
+export HERMES_WEBUI_HOST="${HERMES_WEBUI_HOST:-127.0.0.1}"
+export HERMES_WEBUI_PORT="$PORT"
+export HERMES_HOME="$HERMES_HOME"
+
+cd "$WEBUI_DIR"
+./ctl.sh start "$PORT"
