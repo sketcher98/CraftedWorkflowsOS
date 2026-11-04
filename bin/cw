@@ -1,0 +1,1527 @@
+#!/usr/bin/env python3
+"""cw v4 — faithful web-UI kanban cockpit.
+Drawer: title badge, status, assignee, tenant, priority, 💬, ↳, clean dates.
+Create: Title / Description / Status / Priority / Assignee / Tenant / Workspace / Skills / Max runtime / Parents.
+Assignee dropdown = real profiles from `hermes kanban assignees`.
+Toolbar: search / tenant / assignee / archived / lanes-by-profile / nudge (d).
+Pure stdlib (curses + sqlite + subprocess)."""
+import curses
+import datetime
+import json
+import time
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+DEPT_ROOT = os.path.join(HOME, "CraftedWorkflowsOS", "03_Departments")
+DB_PATH = os.path.join(HOME, ".hermes", "kanban.db")
+HERMES = shutil.which("hermes") or os.path.join(HOME, "bin", "hermes")
+LANES = ["todo", "triage", "ready", "running", "review", "blocked", "scheduled", "done"]
+LANE_SUBTITLE = {
+    "todo": "waiting on deps / not assigned",
+    "triage": "raw ideas — specifier will flesh out",
+    "ready": "assigned, dispatchable",
+    "running": "in-flight — claimed by a worker",
+    "review": "awaiting verdict",
+    "blocked": "needs human / breaker tripped",
+    "scheduled": "parked until time",
+    "done": "history",
+}
+LANE_TINT = {
+    "todo": 0, "triage": 1, "ready": 3, "running": 5,
+    "review": 10, "blocked": 4, "scheduled": 11, "done": 2,
+}
+STATUS_COLORS = {"running": 5, "ready": 3, "review": 10, "blocked": 4,
+                 "triage": 1, "scheduled": 11, "done": 2, "archived": 2, "todo": 0}
+STATUS_EMOJI = {"running": "▶", "ready": "⏳", "review": "👀", "blocked": "🚫",
+                "triage": "🔍", "scheduled": "📅", "done": "✓", "archived": "📦", "todo": "📋"}
+
+
+def hk(args, timeout=120):
+    return subprocess.run([HERMES, "kanban"] + args,
+                          capture_output=True, text=True, timeout=timeout)
+
+
+def out(r):
+    s = (r.stdout or "").strip()
+    e = (r.stderr or "").strip()
+    return (s + "\n" + e).strip() if (e and e not in s) else s
+
+
+def trunc(s, n):
+    s = str(s)
+    return s if len(s) <= n else s[: max(1, n - 1)] + "~"
+
+
+def fmt_age(epoch):
+    if not epoch:
+        return "-"
+    try:
+        d = max(0, int(datetime.datetime.now().timestamp() - epoch))
+    except Exception:
+        return "?"
+    if d < 60: return f"{d}s ago"
+    if d < 3600: return f"{d//60}m ago"
+    if d < 86400: return f"{d//3600}h ago"
+    return f"{d//86400}d ago"
+
+
+def safe_add(scr, y, x, text, attr=0):
+    """curses-safe addstr: never crashes on edge-of-screen."""
+    try:
+        h, w = scr.getmaxyx()
+        if 0 <= y < h and 0 <= x < w:
+            scr.addstr(y, x, trunc(str(text), max(1, w - x - 1)), attr)
+    except curses.error as e:
+        # Log the error instead of swallowing
+        try:
+            with open(os.path.expanduser("~/cw_safe_add_error.log"), "a") as f:
+                f.write(f"safe_add error: y={y}, x={x}, text={str(text)[:50]}, error={e}\n")
+        except:
+            pass
+
+
+def load_state():
+    """Tasks + comment counts + parent counts in one read."""
+    con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    tasks = [dict(r) for r in con.execute("SELECT * FROM tasks")]
+    cc = dict((r[0], r[1]) for r in con.execute(
+        "SELECT task_id, COUNT(*) FROM task_comments GROUP BY task_id"))
+    pc = dict((r[0], r[1]) for r in con.execute(
+        "SELECT parent_id, COUNT(*) FROM task_links GROUP BY parent_id"))
+    p2 = dict((r[0], r[1]) for r in con.execute(
+        "SELECT child_id, COUNT(*) FROM task_links GROUP BY child_id"))
+    rc = dict((r[0], r[1]) for r in con.execute(
+        "SELECT task_id, COUNT(*) FROM task_runs GROUP BY task_id"))
+    ac = dict((r[0], r[1]) for r in con.execute(
+        "SELECT task_id, COUNT(*) FROM task_attachments GROUP BY task_id"))
+    con.close()
+    for t in tasks:
+        t["_comments"] = cc.get(t["id"], 0)
+        t["_children"] = pc.get(t["id"], 0)
+        t["_parents"] = p2.get(t["id"], 0)
+        t["_runs"] = rc.get(t["id"], 0)
+        t["_attachments"] = ac.get(t["id"], 0)
+    return tasks
+
+
+def drawer_lines(t):
+    """RouteOps-style boxed detail: `═` section headers, semantic glyphs."""
+    lines = []
+    emoji = STATUS_EMOJI.get(t.get("status"), "")
+    lines.append(f"{emoji} {t.get('title','(no title)')}")
+    lines.append("═" * 44)
+    st = t.get("status") or "?"
+    lines.append(f"STATUS       {st}")
+    if t.get("assignee"):
+        lines.append(f"ASSIGNEE     {t['assignee']}")
+    if t.get("tenant"):
+        lines.append(f"TENANT       {t['tenant']}")
+    pr = t.get("priority")
+    if pr and pr != 0:
+        lines.append(f"PRIORITY     P{pr}")
+    cp = t.get("completion_contract")
+    if cp:
+        lines.append(f"CONTRACT      {cp}")
+    if t.get("_comments"):
+        lines.append(f"COMMENTS     💬 {t['_comments']}")
+    if t.get("_children"):
+        lines.append(f"CHILDREN    ↳ {t['_children']}")
+    if t.get("_parents"):
+        lines.append(f"PARENTS      ↑ {t['_parents']}")
+    wk = t.get("workspace_kind")
+    if wk and wk != "scratch":
+        lines.append(f"WORKSPACE    {wk}")
+    for k, label in (("created_at", "Created"), ("started_at", "Started"),
+                     ("completed_at", "Completed")):
+        v = t.get(k)
+        if v:
+            lines.append(f"{label:12s} {fmt_age(v)}")
+    if t.get("result"):
+        lines.append(f"RESULT       {str(t['result'])[:200]}")
+    lines.append("═" * 44)
+    # Body
+    body = t.get("body") or "(no description)"
+    lines.append("DESCRIPTION")
+    lines.extend(body.splitlines())
+    lines.append("═" * 44)
+    # Comments
+    try:
+        con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        cs = con.execute("SELECT author, body, created_at FROM task_comments "
+                         "WHERE task_id=? ORDER BY id", (t["id"],)).fetchall()
+        if cs:
+            lines.append("COMMENTS")
+            for c in cs:
+                lines.append(f"  [{fmt_age(c['created_at'])}] {c['author']}: {c['body']}")
+        # Events (compact)
+        es = con.execute("SELECT run_id, kind, payload, created_at FROM task_events "
+                         "WHERE task_id=? ORDER BY id DESC LIMIT 8", (t["id"],)).fetchall()
+        if es:
+            lines.append("═" * 44)
+            lines.append("RECENT EVENTS")
+            for e in reversed(es):
+                run = f" run{e['run_id']}" if e["run_id"] else ""
+                lines.append(f"  [{fmt_age(e['created_at'])}{run}] {e['kind']}: "
+                             f"{_fmt_payload(e['payload'])}")
+        # Runs (compact)
+        rs = con.execute("SELECT id, profile, status, started_at, ended_at, "
+                         "summary FROM task_runs WHERE task_id=? ORDER BY id DESC "
+                         "LIMIT 4", (t["id"],)).fetchall()
+        if rs:
+            lines.append("═" * 44)
+            lines.append("RUNS")
+            for rr in reversed(rs):
+                dur = ""
+                if rr["status"] == "running":
+                    dur = " (active)"
+                elif rr["started_at"] and rr["ended_at"]:
+                    secs = int(rr["ended_at"] - rr["started_at"])
+                    dur = f" {secs}s" if secs < 3600 else f" {fmt_age(rr['started_at'])}"
+                lines.append(f"  #{rr['id']} {rr['profile']} {rr['status']}{dur}: "
+                             f"{(rr['summary'] or '')[:120]}")
+        con.close()
+    except Exception as e:
+        lines.append(f"(detail error: {e})")
+    return lines
+
+
+def comment_lines(tid):
+    try:
+        con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        cs = con.execute("SELECT author, body, created_at FROM task_comments "
+                         "WHERE task_id=? ORDER BY id", (tid,)).fetchall()
+        con.close()
+        if not cs:
+            return ["(no comments)"]
+        return [f"[{fmt_age(c['created_at'])}] {c['author']}: {c['body']}" for c in cs]
+    except Exception as e:
+        return [f"(comment error: {e})"]
+
+
+def _fmt_payload(payload):
+    """Compact, readable event payload line."""
+    try:
+        p = json.loads(payload) if isinstance(payload, str) else payload
+    except Exception:
+        return str(payload)[:140]
+    if not isinstance(p, dict):
+        return json.dumps(p, ensure_ascii=False)[:140]
+    picks = []
+    for k in ("assignee", "status", "parents", "lock", "pid", "filename",
+              "size", "by", "error", "exit_code", "retry_status", "reason",
+              "summary", "child_ids", "parent", "child", "outcome",
+              "claim_expires", "worker_pid"):
+        if k in p:
+            v = p[k]
+            if isinstance(v, list):
+                v = ",".join(str(x)[:14] for x in v[:6])
+            picks.append(f"{k}={v}")
+    if not picks:
+        return json.dumps(p, ensure_ascii=False)[:140]
+    return " ".join(picks)
+
+
+def event_lines(tid):
+    try:
+        con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        es = con.execute("SELECT run_id, kind, payload, created_at FROM task_events "
+                         "WHERE task_id=? ORDER BY id DESC LIMIT 100", (tid,)).fetchall()
+        con.close()
+        if not es:
+            return ["(no events)"]
+        out = []
+        for e in reversed(es):
+            run = f" run{e['run_id']}" if e["run_id"] else ""
+            out.append(f"[{fmt_age(e['created_at'])}{run}] {e['kind']}: "
+                       f"{_fmt_payload(e['payload'])}")
+        return out
+    except Exception as e:
+        return [f"(events error: {e})"]
+
+
+def run_lines(tid):
+    try:
+        con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        rs = con.execute("SELECT id, profile, status, outcome, started_at, ended_at, "
+                         "summary FROM task_runs WHERE task_id=? ORDER BY id DESC "
+                         "LIMIT 50", (tid,)).fetchall()
+        con.close()
+        if not rs:
+            return ["(no runs)"]
+        out = []
+        for rr in reversed(rs):
+            dur = ""
+            if rr["status"] == "running":
+                dur = " (active)"
+            elif rr["started_at"] and rr["ended_at"]:
+                secs = int(rr["ended_at"] - rr["started_at"])
+                if secs < 3600:
+                    dur = f" {secs}s"
+                else:
+                    dur = f" {fmt_age(rr['started_at'])}"
+            summary = (rr["summary"] or rr["outcome"] or "")
+            out.append(f"#{rr['id']} {rr['profile']} {rr['status']}{dur}: "
+                       f"{summary[:160]}")
+        return out
+    except Exception as e:
+        return [f"(runs error: {e})"]
+
+
+def attachment_lines(tid, workspace_path=None):
+    out = []
+    try:
+        con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        rows = con.execute("SELECT id, filename, size, uploaded_by, created_at "
+                           "FROM task_attachments WHERE task_id=? ORDER BY id",
+                           (tid,)).fetchall()
+        con.close()
+        for a in rows:
+            size = a["size"] or 0
+            hs = f"{size/1024:.0f}K" if size >= 1024 else f"{size}B"
+            out.append(f"[{a['id']}] {a['filename']}  ({hs}, by {a['uploaded_by']}, "
+                       f"{fmt_age(a['created_at'])})")
+    except Exception as e:
+        out.append(f"(attachments error: {e})")
+    # workspace directory files
+    ws = []
+    if workspace_path and os.path.isdir(workspace_path):
+        try:
+            for name in sorted(os.listdir(workspace_path)):
+                full = os.path.join(workspace_path, name)
+                if os.path.isfile(full):
+                    size = os.path.getsize(full)
+                    hs = f"{size/1024:.0f}K" if size >= 1024 else f"{size}B"
+                    ws.append(f"[ws] {name}  ({hs})")
+                elif os.path.isdir(full):
+                    ws.append(f"[ws] {name}/  (dir)")
+        except Exception as e:
+            ws.append(f"(workspace error: {e})")
+    if ws:
+        if out:
+            out.append("═" * 44)
+            out.append("WORKSPACE DIR")
+        out.extend(ws)
+    if not out:
+        out.append("(no attachments, no workspace files)")
+        out.append("")
+        out.append("Tips:")
+        out.append("  [a] attach a local file to this card")
+        out.append("  [u] attach by URL")
+        out.append("  Files land here after a worker runs the card")
+    return out
+
+
+def profiles_list():
+    """Real profiles from hermes kanban assignees."""
+    r = hk(["assignees", "--json"])
+    try:
+        d = json.loads(r.stdout)
+        raw = d.get("assignees", d) if isinstance(d, dict) else d
+        return [a if isinstance(a, str) else (a.get("profile") or a.get("name"))
+                for a in raw if (a if isinstance(a, str)
+                                 else (a.get("profile") or a.get("name")))]
+    except Exception:
+        return ["commercial"]
+
+
+def tenants_list():
+    """All tenants on the board."""
+    con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+    tns = {r[0] for r in con.execute(
+        "SELECT tenant FROM tasks WHERE tenant IS NOT NULL")}
+    con.close()
+    return sorted(tns) or ["(none)"]
+
+
+# ------------------------------------------------- full-width editor
+
+class Editor:
+    """Multi-key editor: full terminal width, horizontal scroll, unlimited length."""
+
+    @staticmethod
+    def draw_line(scr, y, x, text, cursor, width, attr=0):
+        off = max(0, cursor - width + 2)
+        vis = text[off:cursor + 1] if len(text) >= width else text
+        scr.addstr(y, x, " " * width, attr)
+        scr.addstr(y, x, trunc(" " + vis + " ", width), attr)
+        cx = x + 1 + (cursor - off)
+        if cx < x + width:
+            scr.chgat(y, cx, 1, attr | curses.A_REVERSE)
+
+    @staticmethod
+    def get(scr, y, x, width, initial="", attr=0):
+        curses.curs_set(0)
+        buf = list(initial)
+        cur = len(buf)
+        while True:
+            Editor.draw_line(scr, y, x, "".join(buf), cur, width, attr)
+            scr.refresh()
+            k = scr.getch()
+            if k in (10, 13):            # enter
+                return "".join(buf).strip()
+            if k == 27:                  # esc
+                return None
+            if k in (curses.KEY_BACKSPACE, 127, 8):
+                if cur > 0:
+                    buf.pop(cur - 1); cur -= 1
+            elif k == curses.KEY_DC:
+                if cur < len(buf): buf.pop(cur)
+            elif k in (curses.KEY_LEFT, 2):
+                cur = max(0, cur - 1)
+            elif k in (curses.KEY_RIGHT, 6):
+                cur = min(len(buf), cur + 1)
+            elif k == curses.KEY_HOME or k == 1:
+                cur = 0
+            elif k == curses.KEY_END or k == 5:
+                cur = len(buf)
+            elif k == 4:                 # ^D
+                return "".join(buf).strip()
+            elif 32 <= k <= 126:
+                buf.insert(cur, chr(k)); cur += 1
+            elif k in (195, 194):        # utf8 lead
+                k2 = scr.getch()
+                if 128 <= k2 <= 191:
+                    # simple two-byte decode
+                    try:
+                        ch = bytes([k, k2]).decode("utf-8", "replace")
+                        buf.insert(cur, ch); cur += 1
+                    except Exception:
+                        pass
+
+
+def editor_field(scr, label, y, width, initial="", attr=0):
+    safe_add(scr, y, 0, label, curses.A_BOLD)
+    return Editor.get(scr, y + 1, 0, width, initial, attr)
+
+
+def multiline_editor(scr, title, hint, h, w):
+    """Full-screen multiline editor. Ctrl-S save, ESC cancel."""
+    curses.curs_set(0)
+    buf = []
+    cur_y = cur_x = 0
+    while True:
+        scr.erase()
+        safe_add(scr, 0, 0, f"{title}  (Ctrl-S save, ESC cancel) - line {cur_y + 1}",
+                 curses.A_BOLD)
+        safe_add(scr, 1, 0, hint, curses.color_pair(8))
+        for i, ln in enumerate(buf):
+            if 2 + i < h - 2:
+                safe_add(scr, 2 + i, 0,
+                         ("| " if i == cur_y else "  ") + ln,
+                         curses.A_REVERSE if i == cur_y else 0)
+        safe_add(scr, h - 1, 0,
+                 "type: chars  BS  Del  arrows  ^S save  ESC cancel",
+                 curses.color_pair(8))
+        scr.refresh()
+        k = scr.getch()
+        if k == 27: return None
+        if k == 19: return "\n".join(buf)          # ^S
+        if k in (curses.KEY_BACKSPACE, 127, 8):
+            if cur_x > 0 and buf:
+                ln = buf[cur_y]
+                buf[cur_y] = ln[:cur_x - 1] + ln[cur_x:]; cur_x -= 1
+            elif cur_y > 0:
+                prev = buf.pop(cur_y - 1); cur_y -= 1; cur_x = len(prev)
+        elif k == curses.KEY_DC and buf and cur_y < len(buf):
+            ln = buf[cur_y]
+            if cur_x < len(ln): buf[cur_y] = ln[:cur_x] + ln[cur_x + 1:]
+            elif cur_y + 1 < len(buf):
+                buf[cur_y] = ln + buf.pop(cur_y + 1)
+        elif k in (curses.KEY_UP, 16):
+            cur_y = max(0, cur_y - 1)
+            cur_x = min(cur_x, len(buf[cur_y]) if buf else 0)
+        elif k in (curses.KEY_DOWN, 14):
+            if cur_y < len(buf) - 1:
+                cur_y += 1; cur_x = min(cur_x, len(buf[cur_y]))
+        elif k in (curses.KEY_LEFT, 2):
+            cur_x = max(0, cur_x - 1)
+        elif k in (curses.KEY_RIGHT, 6):
+            if buf and cur_x < len(buf[cur_y]): cur_x += 1
+        elif k in (curses.KEY_ENTER, 10, 13):
+            if not buf: buf.append("")
+            ln = buf[cur_y]
+            buf.insert(cur_y + 1, ln[cur_x:]); buf[cur_y] = ln[:cur_x]
+            cur_y += 1; cur_x = 0
+        elif 32 <= k <= 126:
+            if not buf: buf.append("")
+            ln = buf[cur_y]
+            buf[cur_y] = ln[:cur_x] + chr(k) + ln[cur_x:]; cur_x += 1
+
+
+# ------------------------------------------------- dialogs
+
+class Dialogs:
+    @staticmethod
+    def input(scr, label, initial=""):
+        h, w = scr.getmaxyx()
+        bh = 6
+        y0 = max(0, (h - bh) // 2 - 1)
+        win = curses.newwin(bh, w, y0, 0)
+        win.keypad(True); win.erase(); win.box()
+        win.addstr(1, 2, trunc(label, w - 4), curses.A_BOLD)
+        win.addstr(3, 1, trunc(" " * (w - 2), w - 2))
+        win.refresh()
+        val = Editor.get(win, 3, 2, w - 4, initial)
+        del win; scr.touchwin(); scr.refresh()
+        return val
+
+    @staticmethod
+    def menu(scr, options, label, allow_cancel=True):
+        if not options:
+            return None
+        h, w = scr.getmaxyx()
+        opts = list(options)
+        bw = max(24, min(w - 2,
+                         max([len(str(o)) for o in opts] + [len(label)]) + 6))
+        bh = min(h - 2, len(opts) + 4)
+        y0 = max(0, (h - bh) // 2)
+        x0 = max(0, (w - bw) // 2)
+        top = s = 0
+        while True:
+            win = curses.newwin(bh, bw, y0, x0)
+            win.keypad(True); win.erase(); win.box()
+            win.addstr(1, 2, trunc(label, bw - 4), curses.A_BOLD)
+            rows = bh - 4
+            s = min(max(s, top), top + rows - 1)
+            top = max(0, min(top, len(opts) - rows)) if len(opts) > rows else 0
+            if s < top: top = s
+            if s >= top + rows: top = s - rows + 1
+            for i in range(top, min(top + rows, len(opts))):
+                mark = "> " if i == s else "  "
+                attr = (curses.color_pair(2) | curses.A_REVERSE) if i == s \
+                    else curses.color_pair(7)
+                win.addstr(2 + i - top, 2, trunc(mark + str(opts[i]), bw - 4), attr)
+            win.addstr(bh - 2, 2, trunc(f"{s+1}/{len(opts)} j/k ENTER esc",
+                                        bw - 4), curses.color_pair(8))
+            win.refresh()
+            k = win.getch()
+            del win; scr.touchwin(); scr.refresh()
+            if k in (10, 13): return opts[s]
+            if k in (curses.KEY_UP, ord("k")) and s > 0: s -= 1
+            if k in (curses.KEY_DOWN, ord("j")) and s < len(opts) - 1: s += 1
+            if k in (curses.KEY_PPAGE, 2): s = max(0, s - rows)
+            if k in (curses.KEY_NPAGE, 6): s = min(len(opts) - 1, s + rows)
+            if k in (27, ord("q")) and allow_cancel: return None
+
+
+# ------------------------------------------------- Board model
+
+class Board:
+    def __init__(self):
+        self.tasks = []
+        self.reload()
+
+    def reload(self):
+        self.tasks = load_state()
+
+    def counts(self):
+        c = {}
+        for t in self.tasks:
+            c[t.get("status") or "done"] = c.get(t.get("status") or "done", 0) + 1
+        # Return ordered by LANES, then archived
+        ordered = {}
+        for st in LANES:
+            if st in c:
+                ordered[st] = c[st]
+        if "archived" in c:
+            ordered["archived"] = c["archived"]
+        return ordered
+
+    def lanes(self, by_assignee=False, archived=False, search="",
+              assignee=None, tenant=None):
+        ts = list(self.tasks)
+        if not archived:
+            ts = [t for t in ts if t.get("status") != "archived"]
+        if assignee:
+            ts = [t for t in ts if (t.get("assignee") or "") == assignee]
+        if tenant:
+            ts = [t for t in ts if (t.get("tenant") or "") == tenant]
+        if search:
+            s = search.lower()
+            ts = [t for t in ts if s in ((t.get("title") or "") + " " +
+                                         (t.get("body") or "")).lower()]
+        if by_assignee:
+            names = sorted({t.get("assignee") or "(unassigned)" for t in ts})
+            return [(n, self._sort_lane([t for t in ts if (t.get("assignee") or "(unassigned)") == n]))
+                    for n in names]
+        return [(st, self._sort_lane([t for t in ts if (t.get("status") or "done") == st]))
+                for st in LANES]
+
+    @staticmethod
+    def _sort_lane(items):
+        return sorted(items, key=lambda t: (-(t.get("priority") or 0),
+                                            t.get("created_at") or 0))
+
+
+# ------------------------------------------------- App (TUI)
+
+class App:
+    def __init__(self):
+        self.board = Board()
+        self.search = ""
+        self.tenant = None
+        self.assignee = None
+        self.by_assignee = False
+        self.show_archived = False
+        self.lane_cols = []
+        self.sel = (0, 0)
+        self.col_off = 0
+        self.sel_set = set()
+        self.status = ""
+        self._profiles_cache = None
+
+    def apply_filters(self):
+        self.lane_cols = self.board.lanes(
+            by_assignee=self.by_assignee, archived=self.show_archived,
+            search=self.search, assignee=self.assignee, tenant=self.tenant)
+        li, ri = self.sel
+        if li >= len(self.lane_cols):
+            li = max(0, len(self.lane_cols) - 1); ri = 0
+        if ri >= len(self.lane_cols[li][1]) if self.lane_cols else True:
+            ri = 0
+        self.sel = (li, ri)
+        self.col_off = 0  # reset horizontal scroll on filter/reload
+
+    def cur(self):
+        li, ri = self.sel
+        if self.lane_cols and li < len(self.lane_cols):
+            lane = self.lane_cols[li][1]
+            if ri < len(lane):
+                return lane[ri]
+        return None
+
+    def reload(self):
+        self.board.reload()
+        if self.sel_set:
+            live = {t["id"] for t in self.board.tasks}
+            self.sel_set &= live
+        self.apply_filters()
+        self._update_gw_pid()
+        for i, (_n, lane) in enumerate(self.lane_cols):
+            if lane:
+                self.sel = (i, 0); break
+
+    def _update_gw_pid(self):
+        try:
+            r = subprocess.run(["ps", "-ef"], capture_output=True, text=True,
+                               timeout=10)
+            for line in r.stdout.splitlines():
+                if "hermes gateway" in line and "grep" not in line:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        self._gw_pid = parts[1]
+                        return
+            self._gw_pid = None
+        except Exception:
+            self._gw_pid = None
+
+    def batch_menu(self, scr):
+        n = len(self.sel_set)
+        if not n:
+            self.status = "batch: nothing selected (space to select)"
+            return
+        acts = [f"Complete all ({n})", f"Unblock all ({n})",
+                f"Block all... ({n})", f"Assign all... ({n})",
+                f"Comment all... ({n})", "Clear selection", "Close"]
+        choice = Dialogs.menu(scr, acts, f"BATCH {n} card(s)")
+        if not choice or choice == "Close":
+            return
+        ids = sorted(self.sel_set)
+        if choice.startswith("Complete"):
+            for i in ids: self.act(["complete", i], "batch completed")
+        elif choice.startswith("Unblock"):
+            for i in ids: self.act(["unblock", i], "batch unblocked")
+        elif choice.startswith("Block"):
+            r = Dialogs.input(scr, "block reason:")
+            if r:
+                for i in ids: self.act(["block", i, r], "batch blocked")
+        elif choice.startswith("Assign"):
+            names = self.profiles() + ["(none)"]
+            p = Dialogs.menu(scr, names, "assign all to:")
+            if p:
+                for i in ids:
+                    self.act(["assign", i, "none" if p == "(none)" else p],
+                              "batch assigned")
+        elif choice.startswith("Comment"):
+            txt = Dialogs.input(scr, "comment on all:")
+            if txt:
+                for i in ids: self.act(["comment", i, txt], "batch commented")
+        elif choice == "Clear selection":
+            self.sel_set.clear(); self.status = "batch cleared"; return
+        self.sel_set.clear()
+        self.reload()
+
+    def profiles(self):
+        if self._profiles_cache is None:
+            self._profiles_cache = profiles_list()
+        return self._profiles_cache
+
+    def act(self, args, label):
+        r = hk(args)
+        self.status = f"{label}: {(out(r) or 'ok')[:60]}"
+        self.reload()
+
+    # ---------------- draw (dashboard-faithful) ----------------
+    def draw(self, scr):
+        try:
+            scr.erase()
+            h, w = scr.getmaxyx()
+            if h < 8:
+                safe_add(scr, 0, 0, "cw: terminal too short"); scr.refresh(); return
+            # separators grey (dim)
+            sep = "─" * max(10, w)
+            scr.addstr(1, 0, sep, curses.A_DIM)
+            scr.addstr(3, 0, sep, curses.A_DIM)
+            scr.addstr(5, 0, sep, curses.A_DIM)
+
+            # status header (compact, col 0) — service facts, not duplicated counts
+            c = self.board.counts()
+            live = bool(c.get("running", 0))
+            state = "RUNNING" if live else "IDLE"
+            gw = getattr(self, "_gw_pid", None)
+            age0 = getattr(self, "_last_refresh", time.time())
+            tick = int(time.time() - age0)
+            HDR = f"● LIVE Kanban:{state} GW:{gw or '?'} Tick:{tick}s"
+            clock = time.strftime("%H:%M:%S")
+            safe_add(scr, 0, 0, HDR[:w - 12], curses.color_pair(2) if live else curses.color_pair(5))
+            safe_add(scr, 0, w - 9, clock, curses.color_pair(5))
+
+            # CAPS title row + hints (HISTORY-style)
+            title = "CW COCKPIT"
+            if self.sel_set:
+                title += f" [BATCH {len(self.sel_set)}]"
+            hints = "[↑/↓] scroll • [←/→] page • [Enter] open • [q]"
+            safe_add(scr, 2, 3, trunc(title, max(8, w - 50)),
+                     curses.A_BOLD | curses.color_pair(6))
+            safe_add(scr, 2, w - 48, trunc(hints, 46), curses.color_pair(8))
+
+            # tab row (col 3, active bracketed + green/bold)
+            x = 3
+            for i, (nm, lane) in enumerate(self.lane_cols):
+                if i == self.sel[0]:
+                    seg = f"[{nm.upper()} {len(lane)}]"
+                    safe_add(scr, 4, x, seg, curses.color_pair(2) | curses.A_BOLD)
+                    x += len(seg) + 1
+                else:
+                    seg = f" {nm.lower()} {len(lane)} "
+                    safe_add(scr, 4, x, seg, curses.color_pair(5))
+                    x += len(seg)
+            # content panel (edge-to-edge)
+            name, lane = self.lane_cols[self.sel[0]] if self.lane_cols else ("", [])
+            self._draw_panel(scr, h, w, name, lane)
+            # footer (HISTORY-style keys)
+            safe_add(scr, h - 3, 3, trunc(self.status, max(8, w - 6)),
+                     curses.color_pair(5))
+            keys = "[Enter] • [a] • [n] • [Space] • [b] • [?] • [q]"
+            safe_add(scr, h - 2, 3, trunc(keys, w - 6),
+                     curses.color_pair(8))
+            scr.refresh()
+        except Exception as e:
+            try:
+                with open(os.path.expanduser("~/cw_draw_error.log"), "a") as f:
+                    f.write(f"{time.time()}: {e}\n")
+                    import traceback
+                    f.write(traceback.format_exc() + "\n")
+            except:
+                pass
+
+    def _draw_panel(self, scr, h, w, name, lane):
+        """One RouteOps panel: ┌ TITLE ─┐ / column header row / rows / └┘. Edge-to-edge."""
+        B = curses.color_pair(8)
+        y0 = 6
+        y1 = h - 4
+        x0 = 0
+        x1 = w - 1
+        # top border
+        emoji = STATUS_EMOJI.get(name, "")
+        tint = LANE_TINT.get(name, 4)
+        top = f"┌ {emoji} {name.upper()} ({len(lane)}) [+] new task "
+        topattr = curses.color_pair(tint) | curses.A_BOLD
+        if tint == 0:
+            topattr |= curses.A_DIM
+        safe_add(scr, y0, x0, trunc(top, x1 - x0), topattr)
+        safe_add(scr, y0, x0 + len(top), "─" * max(0, (x1 - x0) - len(top)), B)
+        safe_add(scr, y0, x1, "┐", B)
+        # sides + bottom
+        for y in range(y0 + 1, y1):
+            safe_add(scr, y, x0, "│", B)
+            safe_add(scr, y, x1, "│", B)
+        safe_add(scr, y1, x0, "└", B)
+        safe_add(scr, y1, x1, "┘", B)
+        for x in range(x0 + 1, x1):
+            safe_add(scr, y1, x, "─", B)
+        cols = x0 + 2
+        cw_ = x1 - x0 - 4
+        # fixed-width meta block (aligned across rows)
+        a_w = 10
+        right_w = a_w + 1 + 4 + 1 + 6 + 1 + 14   # ASG PR AGE + icon block
+        t_w = max(8, cw_ - right_w)
+        # column header row
+        hdr = f"{'CARD':<{t_w}} {'ASG':<{a_w}} {'PR':<4} {'AGE':<6}"
+        safe_add(scr, y0 + 1, cols, trunc(hdr, cw_), curses.A_BOLD | curses.color_pair(5))
+        safe_add(scr, y0 + 2, x0 + 1, "─" * (cw_ + 2), curses.color_pair(8))
+        rows = y1 - y0 - 4
+        scroll = max(0, self.sel[1] - rows + 1)
+        yy = y0 + 3
+        for ri in range(scroll, len(lane)):
+            if yy >= y1 - 1: break
+            t = lane[ri]
+            sel = ri == self.sel[1]
+            mark = "▶" if sel else ("*" if t.get("id") in self.sel_set else " ")
+            st = t.get("status")
+            sglyph = {"running": "LIVE", "blocked": "⛔", "done": "✓"}.get(st, "")
+            cc = t.get("_comments") or 0
+            kids = t.get("_children") or 0
+            up = t.get("_parents") or 0
+            prio = t.get("priority") or 0
+            who = (t.get("assignee") or "-")
+            age = fmt_age(t.get("completed_at") or t.get("started_at")
+                          or t.get("created_at") or 0)
+            age = age.split()[0] if age else ""
+            title_c = trunc((t.get("title") or "")[:t_w - 2], t_w - 2)
+            meta = f"{who:<{a_w}} P{prio:<2} {age:<5}"
+            if sglyph: meta += f" {sglyph}"
+            if cc: meta += f" 💬{cc}"
+            if up or kids: meta += f" ↑{up}↓{kids}"
+            row = f"{mark}{title_c:<{t_w-1}} {meta}"
+            rowcol = STATUS_COLORS.get(st, 7) if not sel else 7
+            rowattr = curses.color_pair(rowcol)
+            if st == "todo" and not sel:
+                rowattr |= curses.A_DIM
+            safe_add(scr, yy, cols, trunc(row, cw_), rowattr)
+            if sel:
+                scr.chgat(yy, cols, cw_, curses.color_pair(9))
+            yy += 1
+        if not lane:
+            safe_add(scr, y0 + 3, cols, "(empty) — [n] or [+] to create",
+                     curses.color_pair(8))
+        if len(lane) - scroll > rows:
+            safe_add(scr, y1 - 1, cols, f"... {len(lane) - scroll - rows} more",
+                     curses.color_pair(8))
+
+    def _cols_wide(self, scr, h, w):
+        colw = 28
+        vis = max(1, (w - 5) // (colw + 2))
+        # DON'T auto-scroll horizontally - only explicit h/l keys move col_off
+        self.col_off = max(0, min(self.col_off, max(0, len(self.lane_cols) - vis)))
+        for vi in range(vis):
+            ci = self.col_off + vi
+            if ci >= len(self.lane_cols): break
+            name, lane = self.lane_cols[ci]
+            x0 = 2 + vi * (colw + 2)
+            if vi > 0:
+                for y in range(4, h - 3):
+                    safe_add(scr, y, x0 - 1, "│", curses.color_pair(8))
+            emoji = STATUS_EMOJI.get(name, "")
+            sub = LANE_SUBTITLE.get(name, "")
+            tint = LANE_TINT.get(name, 8)
+            safe_add(scr, 4, x0, trunc(f"{emoji} {name} ({len(lane)}) [+]", colw),
+                     curses.color_pair(tint) | curses.A_BOLD)
+            safe_add(scr, 5, x0, trunc(sub, colw), curses.color_pair(8))
+            yy = 6
+            for ri, t in enumerate(lane):
+                if yy >= h - 4: break
+                col = STATUS_COLORS.get(t.get("status"), 1)
+                sel = (ci, ri) == self.sel
+                mark = "▶" if sel else ("*" if t.get("id") in self.sel_set else " ")
+                live = " LIVE" if t.get("status") == "running" else ""
+                cc = t.get("_comments") or 0
+                kids = t.get("_children") or 0
+                up = t.get("_parents") or 0
+                prio = t.get("priority") or 0
+                who = (t.get("assignee") or "-")[:4]
+                age = fmt_age(t.get("completed_at") or t.get("started_at")
+                              or t.get("created_at") or 0)
+                age = age.split()[0] if age else ""
+                l1 = f"{mark}{trunc(t.get('title',''), colw-6)}{live}"
+                l2 = f" {who} P{prio} {age}"
+                if up or kids: l2 += f" ↑{up}↓{kids}"
+                if cc: l2 += f" 💬{cc}"
+                safe_add(scr, yy, x0, trunc(l1, colw), curses.color_pair(col))
+                safe_add(scr, yy + 1, x0, trunc(l2, colw),
+                         curses.color_pair(8))
+                if sel:
+                    scr.chgat(yy, x0, colw,
+                              curses.color_pair(9))
+                yy += 2
+            if not lane:
+                safe_add(scr, 6, x0, "(empty)", curses.color_pair(8))
+
+    def _cols_narrow(self, scr, h, w):
+        li = self.sel[0]
+        if not self.lane_cols: return
+        per = max(1, w // 12)
+        lo = max(0, li - per // 2)
+        hi = min(len(self.lane_cols), lo + per)
+        lo = max(0, hi - per)
+        tabs = []
+        for i in range(lo, hi):
+            nm, lane = self.lane_cols[i]
+            emoji = STATUS_EMOJI.get(nm, "")
+            mark = "[]" if i == li else "  "
+            tabs.append(f"{mark}{emoji}{trunc(nm,6)}:{len(lane)}")
+        safe_add(scr, 4, 2, trunc(" ".join(tabs), w - 4),
+                 curses.color_pair(4) | curses.A_BOLD)
+        safe_add(scr, 5, 2, "─" * (w - 4), curses.color_pair(8))
+        name, lane = self.lane_cols[li]
+        rows = h - 9
+        scroll = max(0, self.sel[1] - rows + 1)
+        yy = 6
+        for ri in range(scroll, len(lane)):
+            if yy >= h - 4: break
+            t = lane[ri]
+            col = STATUS_COLORS.get(t.get("status"), 1)
+            sel = ri == self.sel[1]
+            badge = f" 💬{t['_comments']}" if t.get("_comments") else ""
+            up = t.get("_parents") or 0
+            dn = t.get("_children") or 0
+            if up or dn: badge += f" ↑{up}↓{dn}"
+            if t.get("status") == "running": badge += " LIVE"
+            if w >= 56:
+                badge += f" @{trunc(t.get('assignee') or '-',8)} P{t.get('priority') or 0}"
+            age = fmt_age(t.get("completed_at") or t.get("started_at")
+                          or t.get("created_at") or 0)
+            line = f"{'▶ ' if sel else ('* ' if t.get('id') in self.sel_set else '  ')}{trunc(t.get('title',''), w-12)} {age}{badge}"
+            safe_add(scr, yy, 2, trunc(line, w - 4), curses.color_pair(col))
+            if sel:
+                scr.chgat(yy, 2, w - 4, curses.color_pair(9))
+            yy += 1
+        if len(lane) - scroll > rows:
+            safe_add(scr, h - 4, 2, f"... {len(lane) - scroll - rows} more",
+                     curses.color_pair(8))
+
+    # ---------------- drawer (outer frame + flat inner chrome + panel) ----------------
+    def drawer(self, scr, t):
+        h, w = scr.getmaxyx()
+        tabs = ["Overview", "Comments", "Events", "Runs", "Files"]
+        tab = 0
+        off = 0
+        while True:
+            scr.erase()
+            # outer frame around everything
+            B = curses.color_pair(1)
+            safe_add(scr, 0, 0, "╭", B)
+            safe_add(scr, 0, w - 1, "╮", B)
+            safe_add(scr, h - 1, 0, "╰", B)
+            safe_add(scr, h - 1, w - 1, "╯", B)
+            for x in range(1, w - 1):
+                safe_add(scr, 0, x, "─", B)
+                safe_add(scr, h - 1, x, "─", B)
+            for y in range(1, h - 1):
+                safe_add(scr, y, 0, "│", B)
+                safe_add(scr, y, w - 1, "│", B)
+            # separators grey (dim, inside frame, no seam)
+            sep = "─" * max(8, w - 2)
+            scr.addstr(2, 1, sep, curses.A_DIM)
+            scr.addstr(4, 1, sep, curses.A_DIM)
+            scr.addstr(6, 1, sep, curses.A_DIM)
+            # status row (flat)
+            state = "DONE" if t.get("status") == "done" else str(t.get("status", "?")).upper()
+            HDR = f"● LIVE Card:{t['id']} State:{state}"
+            clock = time.strftime("%H:%M:%S")
+            safe_add(scr, 1, 2, HDR[:w - 12],
+                     curses.color_pair(2) if t.get("status") != "blocked"
+                     else curses.color_pair(3))
+            safe_add(scr, 1, w - 9, clock, curses.color_pair(5))
+            # title row + hints
+            title = t.get("title", "")
+            hints = "[←/→] • [Enter] • [Esc] • [q]"
+            safe_add(scr, 3, 2, trunc(title, max(8, w - 34)),
+                     curses.A_BOLD | curses.color_pair(6))
+            safe_add(scr, 3, w - 32, trunc(hints, 30), curses.color_pair(8))
+            # tab row — selected CAPS+green, unselected cyan/grey
+            counts = {"Comments": t.get("_comments") or 0,
+                      "Runs": t.get("_runs") or 0,
+                      "Files": t.get("_attachments") or 0}
+            x = 2
+            for i, n in enumerate(tabs):
+                cnt = counts.get(n, "")
+                cc = f" {cnt}" if cnt else ""
+                if i == tab:
+                    seg = f"[{n.upper()}{cc}]"
+                    safe_add(scr, 5, x, seg, curses.color_pair(2) | curses.A_BOLD)
+                    x += len(seg) + 1
+                else:
+                    seg = f" {n.lower()}{cc} "
+                    safe_add(scr, 5, x, seg, curses.color_pair(5))
+                    x += len(seg)
+            # content (no inner box — sits in outer frame)
+            if tab == 0:
+                lines = drawer_lines(t)
+            elif tab == 1:
+                lines = comment_lines(t["id"])
+            elif tab == 2:
+                lines = event_lines(t["id"])
+            elif tab == 3:
+                lines = run_lines(t["id"])
+            else:
+                lines = attachment_lines(t["id"], t.get("workspace_path"))
+
+            def md_attr(line):
+                attr = curses.color_pair(1)
+                text = line
+                stripped = line.lstrip()
+                if stripped.startswith("#"):
+                    attr = curses.color_pair(4) | curses.A_BOLD
+                    text = stripped.lstrip("#").strip()
+                elif "**" in line:
+                    attr = curses.A_BOLD
+                    text = line.replace("**", "")
+                return text.replace("`", ""), attr
+
+            y0 = 7
+            y1 = h - 4
+            cols = 3
+            cw_ = w - 6
+            rendered = []
+            for ln in lines:
+                while len(ln) > cw_:
+                    rendered.append((ln[:cw_], None)); ln = ln[cw_:]
+                rendered.append((ln, None))
+            rows = y1 - y0 - 1
+            for i in range(off, min(off + rows, len(rendered))):
+                txt, a = rendered[i]
+                if tab == 0:
+                    txt, a = md_attr(txt)
+                safe_add(scr, y0 + i - off, cols, txt,
+                         a or curses.color_pair(1))
+            # footer inside outer frame
+            if tab == 4:
+                help_txt = "a attach file  u attach URL  x remove  j/k scroll  q close"
+            else:
+                help_txt = "a actions  c comment  e edit  j/k scroll  q close"
+            safe_add(scr, h - 3, 2, trunc(help_txt, max(8, w - 6)),
+                     curses.color_pair(8))
+            scr.refresh()
+            k = scr.getch()
+            if k in (27, ord("q")): return
+            if tab == 4 and k in (ord("a"), ord("x"), ord("u")):
+                if k == ord("a"):
+                    p = Dialogs.input(scr, "path to attach:")
+                    if p:
+                        self.act(["attach", t["id"], p], "attached")
+                        off = 0
+                elif k == ord("u"):
+                    p = Dialogs.input(scr, "URL to attach:")
+                    if p:
+                        self.act(["attach-url", t["id"], p], "attached")
+                        off = 0
+                else:
+                    ids = []
+                    for ln in attachment_lines(t["id"]):
+                        m = re.match(r"\[(\d+)\]", ln)
+                        if m: ids.append(m.group(1))
+                    if not ids:
+                        self.status = "no attachments to remove"
+                    else:
+                        c = Dialogs.menu(scr, [f"remove #{i}" for i in ids],
+                                         "remove which attachment?")
+                        if c:
+                            aid = c.split("#")[1]
+                            self.act(["attach-rm", aid], "removed")
+                            off = 0
+                self.reload()
+                continue
+            if k == ord("a"): self.action_menu(scr, t)
+            if k == ord("e"): self.drawer_edit(scr, t)
+            if k == ord("c"):
+                txt = Dialogs.input(scr, f"comment on {t['id']}:")
+                if txt: self.act(["comment", t["id"], txt], "commented")
+            if k in (curses.KEY_RIGHT, ord("l")): tab = (tab + 1) % len(tabs); off = 0
+            if k in (curses.KEY_LEFT, ord("h")): tab = (tab - 1) % len(tabs); off = 0
+            if k in (curses.KEY_DOWN, ord("j")) and off < len(rendered) - rows: off += 1
+            if k in (curses.KEY_UP, ord("k")) and off > 0: off -= 1
+
+    def drawer_edit(self, scr, t):
+        acts = ["Assignee...", "Priority...", "Link parent/child...",
+                "Unlink dependency...", "Close"]
+        choice = Dialogs.menu(scr, acts, f"edit {t['id']}")
+        tid = t["id"]
+        if choice == "Assignee...":
+            names = self.profiles() + ["(none)"]
+            p = Dialogs.menu(scr, names, "assign to:")
+            if p:
+                self.act(["assign", tid, "none" if p == "(none)" else p],
+                          "assigned")
+        elif choice == "Priority...":
+            v = Dialogs.input(scr, "priority (int):", "0")
+            if v and re.match(r"^-?\d+$", v):
+                self.act(["edit", "--result", v, tid], "priority")
+        elif choice == "Link parent/child...":
+            targets = [f"{t2['id']} - {(t2.get('title') or '')[:28]}"
+                       for t2 in self.board.tasks
+                       if t2.get("status") != "archived" and t2["id"] != tid]
+            if not targets:
+                self.status = "no other cards to link"; return
+            ti = Dialogs.menu(scr, targets, "link with:")
+            if not ti: return
+            other = ti.split(" - ")[0]
+            d = Dialogs.menu(scr,
+                             ["This card is PARENT of target",
+                              "Target is PARENT of this"], "direction:")
+            if d and d.startswith("This"):
+                self.act(["link", tid, other], "linked")
+            elif d:
+                self.act(["link", other, tid], "linked")
+        elif choice == "Unlink dependency...":
+            con = sqlite3.connect("file:" + DB_PATH + "?mode=ro", uri=True)
+            pairs = con.execute(
+                "SELECT parent_id, child_id FROM task_links "
+                "WHERE parent_id=? OR child_id=?", (tid, tid)).fetchall()
+            con.close()
+            if not pairs:
+                self.status = "no links on this card"; return
+            opts = [f"{p} -> {c}" for p, c in pairs]
+            choose = Dialogs.menu(scr, opts, "unlink:")
+            if choose:
+                p, c = choose.split(" -> ")
+                self.act(["unlink", p, c], "unlinked")
+
+    # ---------------- action menu (dashboard parity) ----------------
+    def action_menu(self, scr, t):
+        st = t.get("status")
+        acts = ["Open detail", "Add comment", "Assign...", "Copy id",
+                "Set priority..."]
+        if st in ("ready", "todo", "scheduled"):
+            acts += ["Claim"]
+        if st == "running":
+            acts += ["Release claim (reclaim)"]
+        if st == "blocked":
+            acts += ["Unblock"]
+        if st in ("done",):
+            acts += ["Reopen (archive note)"]
+        else:
+            acts += ["Mark done", "Request review"]
+        if st == "review":
+            acts += ["Request changes (verdict)"]
+        acts += ["Block...", "Archive card", "Nudge dispatcher"]
+        choice = Dialogs.menu(scr, acts, f"{t['id']}: {trunc(t.get('title',''),30)}")
+        if not choice: return
+        tid = t["id"]
+        if choice == "Open detail":
+            self.drawer(scr, t)
+        elif choice == "Add comment":
+            txt = Dialogs.input(scr, "comment:")
+            if txt: self.act(["comment", tid, txt], "commented")
+        elif choice == "Assign...":
+            names = self.profiles() + ["(none)"]
+            p = Dialogs.menu(scr, names, "assign to:")
+            if p:
+                self.act(["assign", tid, "none" if p == "(none)" else p], "assigned")
+        elif choice == "Copy id":
+            self.status = f"id {tid} (long-press terminal to copy)"
+        elif choice == "Set priority...":
+            v = Dialogs.input(scr, "priority (int):", "0")
+            if v and re.match(r"^-?\d+$", v):
+                self.act(["edit", "--result", v, tid], "priority")
+        elif choice == "Claim":
+            self.act(["claim", tid], "claimed")
+        elif choice == "Release claim (reclaim)":
+            self.act(["reclaim", tid], "reclaimed")
+        elif choice == "Unblock":
+            self.act(["unblock", tid], "unblocked")
+        elif choice == "Mark done":
+            s = Dialogs.input(scr, "summary (optional):")
+            self.act(["complete", tid, "--summary", s] if s
+                     else ["complete", tid], "completed")
+        elif choice == "Request review":
+            self.act(["request-review", tid], "review requested")
+        elif choice == "Request changes (verdict)":
+            r = Dialogs.input(scr, "required changes:")
+            if r: self.act(["request-changes", tid, r], "changes requested")
+        elif choice == "Block...":
+            r = Dialogs.input(scr, "block reason:")
+            if r: self.act(["block", tid, r], "blocked")
+        elif choice == "Archive card":
+            if Dialogs.input(scr, f"type y to archive {tid}:") == "y":
+                self.act(["archive", tid], "archived")
+        elif choice == "Nudge dispatcher":
+            r = hk(["dispatch"])
+            self.status = f"nudge: {out(r)[:50]}"
+            self.reload()
+
+    def create_dialog(self, scr, initial_status=None):
+        """Unified form-like task creation - all fields in one view."""
+        h, w = scr.getmaxyx()
+        fields = [
+            ("title", "Title (one line)", "", "text"),
+            ("description", "Description (optional)", "", "multiline"),
+            ("status", "Status:", "todo", "menu"),
+            ("priority", "Priority (int):", "0", "text"),
+            ("assignee", "Assignee:", None, "menu"),
+            ("tenant", "Tenant:", None, "menu"),
+            ("workspace", "Workspace:", "scratch", "menu"),
+            ("skills", "Skills (comma-separated):", "", "text"),
+            ("runtime", "Max runtime (sec):", "", "text"),
+            ("parent", "Parent (optional):", None, "menu"),
+        ]
+        
+        # Pre-load options
+        statuses = LANES + ["archived"]
+        assignees = self.profiles() + ["(none)"]
+        tenants = tenants_list() + ["(none)", "(new...)"]
+        workspaces = ["scratch", "dir:/path", "worktree:repo"]
+        parents = [f"{t['id']} - {trunc(t.get('title',''),30)}"
+                   for t in self.board.tasks if t.get("status") != "archived"]
+        parents.append("(none)")
+        
+        options_map = {
+            "status": statuses,
+            "assignee": assignees,
+            "tenant": tenants + ["(none)", "(new...)"],
+            "workspace": ["scratch", "dir:/path", "worktree:repo"],
+            "parent": parents + ["(none)"],
+        }
+        
+        # Default values
+        values = {
+            "title": "", "description": "", "status": initial_status or "todo",
+            "priority": "0",
+            "assignee": "commercial", "tenant": None, "workspace": "scratch",
+            "skills": "", "runtime": "", "parent": None,
+        }
+        
+        field_idx = 0
+        
+        while True:
+            scr.erase()
+            safe_add(scr, 0, 0, trunc("NEW TASK  (Tab/Shift+Tab=navigate  Enter=edit  ESC=cancel  Ctrl+S=save)", w - 1),
+                     curses.A_BOLD | curses.color_pair(4))
+            safe_add(scr, 1, 0, "─" * (w - 1), curses.color_pair(8))
+            
+            for i, (key, label, default, ftype) in enumerate(fields):
+                y = 3 + i * 2
+                prefix = "▸ " if i == field_idx else "  "
+                val = values[key]
+                if ftype == "multiline":
+                    display = val.replace("\n", "\\n") if val else "(empty)"
+                elif ftype == "menu":
+                    display = val if val else "(select)"
+                else:
+                    display = val
+                safe_add(scr, y, 0, trunc(f"{prefix}{label} {display}", w - 1),
+                         curses.A_REVERSE if i == field_idx else curses.color_pair(7))
+            
+            safe_add(scr, h - 1, 0, "Tab/Shift+Tab=navigate  Enter=edit  Ctrl+S=save  ESC=cancel",
+                     curses.color_pair(8))
+            scr.refresh()
+            
+            k = scr.getch()
+            if k in (27,):  # ESC - cancel
+                self.status = "create cancelled"
+                return
+            elif k in (curses.KEY_BTAB,):  # Shift+Tab
+                field_idx = (field_idx - 1) % len(fields)
+            elif k in (9,):  # Tab
+                field_idx = (field_idx + 1) % len(fields)
+            elif k in (curses.KEY_UP,):  # Up
+                field_idx = (field_idx - 1) % len(fields)
+            elif k in (curses.KEY_DOWN,):  # Down
+                field_idx = (field_idx + 1) % len(fields)
+            elif k in (10, 13):  # Enter
+                if field_idx == len(fields) - 1:
+                    # Last field - Enter saves
+                    break
+                key, label, default, ftype = fields[field_idx]
+                # Debug
+                try:
+                    with open(os.path.expanduser("~/cw_create_debug.log"), "a") as f:
+                        f.write(f"ENTER: field_idx={field_idx}, key={key}, ftype={ftype}\\n")
+                except:
+                    pass
+                if ftype == "text":
+                    val = Dialogs.input(scr, f"{label} [{values[key]}]:", values[key])
+                    if val is None: return
+                    values[key] = val or values[key]
+                elif ftype == "multiline":
+                    val = multiline_editor(scr, f"{label} (Ctrl+S save, ESC cancel)", 
+                                           "type: chars  BS  Del  arrows  ^S save  ESC cancel", h, w)
+                    if val is None: return
+                    values[key] = val
+                elif ftype == "menu":
+                    opts = options_map[key]
+                    val = Dialogs.menu(scr, opts, f"{label}:")
+                    if val is None: return
+                    if val == "(none)":
+                        values[key] = None
+                    elif val == "(new...)":
+                        val = Dialogs.input(scr, "New tenant name:", "")
+                        if val is None: return
+                        values[key] = val if val else None
+                    else:
+                        values[key] = val
+                # After editing, move to next field
+                field_idx = (field_idx + 1) % len(fields)
+                # Debug
+                try:
+                    with open(os.path.expanduser("~/cw_create_debug.log"), "a") as f:
+                        f.write(f"After edit: field_idx={field_idx}, key={key}, val={values.get(key)}\\n")
+                except:
+                    pass
+            elif k == 19:  # Ctrl+S - save
+                break
+            elif k == 27:  # ESC - cancel
+                self.status = "create cancelled"
+                return
+        
+        # Validate and create
+        title = values["title"]
+        if not title:
+            self.status = "create cancelled: title required"
+            return
+        
+        body = values["description"] if values["description"] else "(no description)"
+        args = ["create", title, "--body", body, "--assignee", values["assignee"] or "commercial"]
+        if values["priority"] and re.match(r"^-?\d+$", values["priority"]):
+            args += ["--priority", values["priority"]]
+        if values["tenant"]: args += ["--tenant", values["tenant"]]
+        if values["workspace"] and values["workspace"] != "scratch": args += ["--workspace", values["workspace"]]
+        if values["skills"]: args += ["--skill", values["skills"]]
+        if values["runtime"] and re.match(r"^\d+$", values["runtime"]): args += ["--max-runtime", values["runtime"]]
+        if values["parent"] and values["parent"] != "(none)": args += ["--parent", values["parent"].split(" - ")[0]]
+        if values["status"] in ("blocked", "running"):
+            args += ["--initial-status", values["status"]]
+        
+        r = hk(args)
+        self.status = f"create: {(out(r) or 'ok')[:60]}"
+        self.reload()
+
+    # ---------------- toolbar filter dialogs ----------------
+    def toolbar_search(self, scr):
+        s = Dialogs.input(scr, "search title/body (empty=clear):", self.search)
+        if s is not None:
+            self.search = s; self.sel = (0, 0); self.apply_filters()
+            self.status = f"search: '{s}'" if s else "search cleared"
+
+    def toolbar_assignee(self, scr):
+        names = self.profiles() + ["(all)"]
+        p = Dialogs.menu(scr, names, "filter assignee:")
+        if p:
+            self.assignee = None if p == "(all)" else p
+            self.sel = (0, 0); self.apply_filters()
+            self.status = f"assignee: {p}"
+
+    def toolbar_tenant(self, scr):
+        tns = tenants_list() + ["(all)"]
+        p = Dialogs.menu(scr, tns, "tenant:")
+        if p:
+            self.tenant = None if p == "(all)" else (None if p == "(none)" else p)
+            self.sel = (0, 0); self.apply_filters()
+            self.status = f"tenant: {p}"
+
+    # ---------------- main loop (exception-safe) ----------------
+    def run(self, scr):
+        curses.curs_set(0)
+        try:
+            curses.start_color(); curses.use_default_colors()
+            for i in range(1, 9): curses.init_pair(i, i % 8, -1)
+        except Exception: pass
+        try:
+            # explicit ANSI color indices: 0 black 1 red 2 green 3 yellow
+            # 4 blue 5 magenta 6 cyan 7 white
+            idx = {1: 7, 2: 2, 3: 3, 4: 1, 5: 6, 6: 5, 7: 4,
+                   8: 7, 9: 0, 10: 5, 11: 4}
+            for i, c in idx.items():
+                try:
+                    curses.init_pair(i, c, -1)
+                except Exception:
+                    pass
+            curses.init_pair(9, 0, 7)   # selected row: black on white
+        except Exception:
+            pass
+        scr.keypad(True); self.reload()
+        self._last_refresh = time.time()
+        while True:
+            if time.time() - self._last_refresh > 30:
+                self._last_refresh = time.time()
+                self.board.reload(); self.apply_filters()
+            try:
+                self.draw(scr)
+            except Exception as e:
+                self.status = f"draw error: {e}"
+            k = scr.getch()
+            try:
+                if self._dispatch_key(scr, k): return
+            except Exception as e:
+                self.status = f"error: {e} (r to reload)"
+
+    def _dispatch_key(self, scr, k):
+        li, ri = self.sel
+        nlanes = len(self.lane_cols)
+        if k in (27, ord("q")): return True
+        if k == curses.KEY_RESIZE:
+            scr.erase(); scr.refresh(); return False
+        if k in (ord("j"), curses.KEY_DOWN):
+            lane = self.lane_cols[li][1] if self.lane_cols else []
+            if ri < len(lane) - 1: self.sel = (li, ri + 1)
+        elif k in (ord("k"), curses.KEY_UP):
+            if ri > 0: self.sel = (li, ri - 1)
+        elif k in (ord("l"), curses.KEY_RIGHT):
+            if li < nlanes - 1:
+                self.sel = (li + 1, 0)
+                vis = max(1, (scr.getmaxyx()[1] - 2) // 30)
+                if self.sel[0] >= self.col_off + vis:
+                    self.col_off = self.sel[0] - vis + 1
+        elif k in (ord("h"), curses.KEY_LEFT):
+            if li > 0:
+                self.sel = (li - 1, 0)
+                if self.sel[0] < self.col_off:
+                    self.col_off = self.sel[0]
+        elif k == ord("r"): self.reload(); self.status = "reloaded"
+        elif k == ord("/"): self.toolbar_search(scr)
+        elif k == ord("@"): self.toolbar_assignee(scr)
+        elif k == ord("t"): self.toolbar_tenant(scr)
+        elif k == ord("g"):
+            self.by_assignee = not self.by_assignee
+            self.sel = (0, 0); self.apply_filters()
+            self.status = "lanes by profile" if self.by_assignee else "lanes by status"
+        elif k == ord("v"):
+            self.show_archived = not self.show_archived
+            self.apply_filters()
+            self.status = "archived shown" if self.show_archived else "archived hidden"
+        elif k == ord("n"):
+            self.create_dialog(scr)
+        elif k == ord("+"):
+            li = self.sel[0] if self.lane_cols else 0
+            status = self.lane_cols[li][0] if self.lane_cols else "todo"
+            self.create_dialog(scr, initial_status=status)
+        elif k == ord("d"):
+            r = hk(["dispatch"])
+            self.status = f"nudge: {out(r)[:60]}"; self.reload()
+        elif k == ord("s"):
+            r = hk(["stats"]); self.scrollable(scr, "stats", out(r).splitlines())
+        elif k in (10, 13):
+            t = self.cur()
+            if t: self.drawer(scr, t)
+        elif k == ord("a"):
+            t = self.cur()
+            if t: self.action_menu(scr, t)
+        elif k == ord("x"):
+            t = self.cur()
+            if t:
+                txt = Dialogs.input(scr, "comment on card:")
+                if txt: self.act(["comment", t["id"], txt], "commented")
+        elif k == 32:
+            t = self.cur()
+            if t:
+                if t["id"] in self.sel_set:
+                    self.sel_set.discard(t["id"])
+                else:
+                    self.sel_set.add(t["id"])
+                self.status = f"batch: {len(self.sel_set)} selected"
+        elif k == ord("b"):
+            self.batch_menu(scr)
+        elif k == ord("?"):
+            self.scrollable(scr, "keys", HELP.splitlines())
+        return False
+
+    def scrollable(self, scr, title, lines):
+        h, w = scr.getmaxyx(); off = 0
+        while True:
+            scr.erase()
+            safe_add(scr, 0, 0, trunc(f"{title} ({len(lines)}L)  j/k scroll  q close", w - 1),
+                     curses.A_BOLD)
+            rows = h - 2
+            for i in range(off, min(off + rows, len(lines))):
+                safe_add(scr, 1 + i - off, 0, lines[i], curses.color_pair(7))
+            scr.refresh()
+            k = scr.getch()
+            if k in (27, ord("q")): return
+            if k in (curses.KEY_DOWN, ord("j")) and off < len(lines) - rows: off += 1
+            if k in (curses.KEY_UP, ord("k")) and off > 0: off -= 1
+
+
+# ------------------------------------------------- entry / help / cli
+
+HELP = """cw v2 - kanban cockpit (RouteOps-styled)
+
+  ENTER        open card drawer (tabs: overview/comments/events/runs)
+  a            action menu: claim, release claim, comment, assign, priority,
+              done, review, request-changes, block/unblock, archive, nudge
+  n            new task (full form)
+  SPACE       toggle card into batch selection
+  b            batch menu: complete/unblock/block/assign/comment on all selected
+  / @ t        toolbar filters: search, assignee, tenant
+  g            lanes by profile <-> by status
+  v            toggle show archived
+  s            board stats
+  d            nudge dispatcher
+  r            reload board
+  j/k h/l      move selection (cards / lanes)
+  q or ESC     quit / close drawer
+"""
+
+
+def print_table(tasks):
+    if not tasks:
+        print("(board is empty)")
+        return
+    rank = {s: i for i, s in enumerate(LANES + ["archived"])}
+    tasks = sorted(tasks, key=lambda t: (rank.get(t.get("status"), 99),
+                                         -(t.get("priority") or 0)))
+    print(f"{'ID':<12} {'ST':<9} {'ASSIGNEE':<11} {'P':>2}  TITLE")
+    print("-" * 78)
+    for t in tasks:
+        print(f"{trunc(t.get('id',''),12):<12} {trunc(t.get('status') or '-',9):<9} "
+              f"{trunc(t.get('assignee') or '-',11):<11} "
+              f"{t.get('priority') or 0:>2}  {trunc(t.get('title',''),44)}")
+
+
+def main():
+    a = sys.argv[1:]
+    if not a:
+        if sys.stdin.isatty():
+            app = App()
+            curses.wrapper(app.run)
+        else:
+            print_table(load_state())
+        return
+    cmd = a[0]
+    if cmd in ("help", "-h", "--help"):
+        print(HELP)
+    elif cmd in ("tui", "--tui"):
+        app = App()
+        curses.wrapper(app.run)
+    elif cmd == "table":
+        print_table(load_state())
+    elif cmd == "show" and len(a) > 1:
+        print("\n".join(drawer_lines({k: v for k, v in
+            [x.split(":", 1) for x in task_detail(a[1]).splitlines()
+             if ":" in x]})))
+    elif cmd == "stats":
+        print(out(hk(["stats"])))
+    elif cmd == "nudge":
+        print(out(hk(["dispatch"])))
+    elif cmd == "complete" and len(a) > 1:
+        s = " ".join(a[2:])
+        print(out(hk(["complete", a[1], "--summary", s] if s else ["complete", a[1]])))
+    elif cmd == "changes" and len(a) > 2:
+        print(out(hk(["request-changes", a[1], " ".join(a[2:])])))
+    elif cmd == "assign" and len(a) > 2:
+        print(out(hk(["assign", a[1], a[2]])))
+    elif cmd == "block" and len(a) > 2:
+        print(out(hk(["block", a[1], " ".join(a[2:])])))
+    elif cmd == "comment" and len(a) > 2:
+        print(out(hk(["comment", a[1], " ".join(a[2:])])))
+    elif cmd == "unblock" and len(a) > 1:
+        print(out(hk(["unblock", a[1]])))
+    else:
+        print("cw: unknown command (try 'cw help')")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print()
